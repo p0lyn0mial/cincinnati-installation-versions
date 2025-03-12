@@ -7,8 +7,9 @@ import (
 	"io"
 	"net/http"
 	"sort"
-	"strconv"
 	"strings"
+
+	"github.com/Masterminds/semver/v3"
 )
 
 type CincinnatiGraph struct {
@@ -16,14 +17,14 @@ type CincinnatiGraph struct {
 }
 
 type CincinnatiNode struct {
-	Version  string            `json:"version"`
+	Version  *semver.Version   `json:"version"`
 	Payload  string            `json:"payload"`
 	Metadata map[string]string `json:"metadata"`
 }
 
-func fetchGraph(channel string) (*CincinnatiGraph, error) {
+func fetchGraph(client *http.Client, channel string) (*CincinnatiGraph, error) {
 	url := fmt.Sprintf("https://api.openshift.com/api/upgrades_info/graph?channel=%s", channel)
-	resp, err := http.Get(url)
+	resp, err := client.Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("error fetching data from %s: %w", url, err)
 	}
@@ -45,40 +46,17 @@ func fetchGraph(channel string) (*CincinnatiGraph, error) {
 	return &graph, nil
 }
 
-// compareVersions compares two version strings (e.g. "4.16.0" vs "4.16.1").
-// Returns -1 if a < b, 0 if a == b, 1 if a > b.
-func compareVersions(a, b string) int {
-	partsA := strings.Split(a, ".")
-	partsB := strings.Split(b, ".")
-	maxLen := len(partsA)
-	if len(partsB) > maxLen {
-		maxLen = len(partsB)
-	}
-	for i := 0; i < maxLen; i++ {
-		var numA, numB int
-		if i < len(partsA) {
-			numA, _ = strconv.Atoi(partsA[i])
-		}
-		if i < len(partsB) {
-			numB, _ = strconv.Atoi(partsB[i])
-		}
-		if numA < numB {
-			return -1
-		} else if numA > numB {
-			return 1
-		}
-	}
-	return 0
+// extractSemVersionFromChannel extracts the version part from a channel name by removing the prefix
+// and creates a semver.Version. For example, for "stable-4.16" with prefix "stable-" it returns semver version "4.16".
+func extractSemVersionFromChannel(channel, prefix string) (*semver.Version, error) {
+	trimmed := strings.TrimSpace(channel[len(prefix):])
+	return semver.NewVersion(trimmed)
 }
 
-func isVersionNewer(a, b string) bool {
-	return compareVersions(a, b) >= 0
-}
-
-// extractVersionFromChannel extracts the version part from a channel name by removing the prefix.
-// For example, "stable-4.16" with prefix "stable-" returns "4.16".
-func extractVersionFromChannel(channel, prefix string) string {
-	return strings.TrimSpace(channel[len(prefix):])
+// dropPatch accepts a semver.Version and returns a new semver.Version dropping the patch part
+func dropPatch(v *semver.Version) (*semver.Version, error) {
+	newVersionStr := fmt.Sprintf("%v.%v", v.Major(), v.Minor())
+	return semver.NewVersion(newVersionStr)
 }
 
 func main() {
@@ -88,6 +66,20 @@ func main() {
 	flag.Parse()
 
 	prefixes := strings.Split(*prefixesArg, ",")
+
+	minVer, err := semver.NewVersion(*minVersion)
+	if err != nil {
+		fmt.Printf("Error parsing min version %s: %v\n", *minVersion, err)
+		return
+	}
+
+	minChannelVer, err := dropPatch(minVer)
+	if err != nil {
+		fmt.Printf("Error dropping patch from min version %s: %v\n", minVer.String(), err)
+		return
+	}
+
+	client := &http.Client{}
 
 	processedChannels := make(map[string]bool)
 	nodesByChannel := make(map[string]map[string]CincinnatiNode)
@@ -104,7 +96,7 @@ func main() {
 		processedChannels[currentChannel] = true
 
 		fmt.Printf("Fetching graph for channel: %s\n", currentChannel)
-		graph, err := fetchGraph(currentChannel)
+		graph, err := fetchGraph(client, currentChannel)
 		if err != nil {
 			fmt.Printf("Error fetching graph for channel %s: %v\n", currentChannel, err)
 			continue
@@ -115,8 +107,8 @@ func main() {
 		}
 
 		for _, node := range graph.Nodes {
-			if isVersionNewer(node.Version, *minVersion) {
-				nodesByChannel[currentChannel][node.Version] = node
+			if node.Version != nil && node.Version.Compare(minVer) >= 0 {
+				nodesByChannel[currentChannel][node.Version.String()] = node
 			}
 
 			if channels, ok := node.Metadata["io.openshift.upgrades.graph.release.channels"]; ok {
@@ -125,9 +117,13 @@ func main() {
 					// Check if the channel starts with one of the specified prefixes.
 					for _, prefix := range prefixes {
 						if strings.HasPrefix(ch, prefix) {
-							versionPart := extractVersionFromChannel(ch, prefix)
-							// Only consider channels with version >= minimal version.
-							if compareVersions(versionPart, *minVersion) >= 0 {
+							// Only consider channels with version >= minimal version
+							channelVer, err := extractSemVersionFromChannel(ch, prefix)
+							if err != nil {
+								fmt.Printf("Error parsing channel version from %s: %v\n", ch, err)
+								continue
+							}
+							if channelVer.Compare(minChannelVer) >= 0 {
 								if !processedChannels[ch] {
 									fmt.Printf("Discovered new channel: %s\n", ch)
 									queue = append(queue, ch)
@@ -148,16 +144,15 @@ func main() {
 			nodes = append(nodes, node)
 		}
 		sort.Slice(nodes, func(i, j int) bool {
-			return compareVersions(nodes[i].Version, nodes[j].Version) < 0
+			return nodes[i].Version.Compare(nodes[j].Version) < 0
 		})
 		fmt.Printf("Channel %s:\n", channel)
 		for _, node := range nodes {
-			fmt.Printf("  Version: %s, Payload: %s\n", node.Version, node.Payload)
+			fmt.Printf("  Version: %s, Payload: %s\n", node.Version.String(), node.Payload)
 		}
 	}
 
 	// Aggregate and display unique releases per channel type.
-	// For each prefix, merge nodes from all channels that start with that prefix.
 	uniqueNodesByPrefix := make(map[string]map[string]CincinnatiNode)
 	for _, prefix := range prefixes {
 		uniqueNodesByPrefix[prefix] = make(map[string]CincinnatiNode)
@@ -177,11 +172,11 @@ func main() {
 			nodes = append(nodes, node)
 		}
 		sort.Slice(nodes, func(i, j int) bool {
-			return compareVersions(nodes[i].Version, nodes[j].Version) < 0
+			return nodes[i].Version.Compare(nodes[j].Version) < 0
 		})
 		fmt.Printf("Channel type %s:\n", prefix)
 		for _, node := range nodes {
-			fmt.Printf("  Version: %s, Payload: %s\n", node.Version, node.Payload)
+			fmt.Printf("  Version: %s, Payload: %s\n", node.Version.String(), node.Payload)
 		}
 	}
 }
