@@ -1,0 +1,11 @@
+{
+  "nodes": [
+    {
+      "version": "4.16.2",
+      "payload": "payload-stable",
+      "metadata": {
+        "io.openshift.upgrades.graph.release.channels": "fast-4.16, experimental-4.16"
+      }
+    }
+  ]
+}
