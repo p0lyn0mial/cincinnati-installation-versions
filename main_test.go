@@ -124,3 +124,185 @@ func TestFetchGraph(t *testing.T) {
 		})
 	}
 }
+
+func TestDiscoverReleases(t *testing.T) {
+	type fileResponse struct {
+		filename   string
+		statusCode int
+	}
+
+	tests := []struct {
+		name         string
+		startChannel string
+		arch         string
+		// responses maps URL -> fileResponse
+		responses     map[string]fileResponse
+		minVer        string
+		minChannelVer string
+		prefixes      []string
+		expected      ReleasesByChannel
+	}{
+		{
+			name:         "discovered additional channel (stable & fast)",
+			startChannel: "stable-4.16",
+			arch:         "amd64",
+			responses: map[string]fileResponse{
+				"https://api.openshift.com/api/upgrades_info/graph?channel=stable-4.16&arch=amd64": {filename: "testdata/discover-releases-scenario-1-stable-4.16.json", statusCode: 200},
+				"https://api.openshift.com/api/upgrades_info/graph?channel=fast-4.16&arch=amd64":   {filename: "testdata/discover-releases-scenario-1-fast-4.16.json", statusCode: 200},
+			},
+			minVer:        "4.16.0",
+			minChannelVer: "4.16",
+			prefixes:      []string{"stable-", "fast-"},
+			expected: ReleasesByChannel{
+				"stable-4.16": {
+					"4.16.2": []Release{
+						{
+							Version:  versionOrDie("4.16.2"),
+							Channel:  "stable-4.16",
+							Arch:     "amd64",
+							Payload:  "payload-stable",
+							Metadata: map[string]string{"io.openshift.upgrades.graph.release.channels": "stable-4.16, fast-4.16"},
+						},
+					},
+				},
+				"fast-4.16": {
+					"4.16.3": []Release{
+						{
+							Version:  versionOrDie("4.16.3"),
+							Channel:  "fast-4.16",
+							Arch:     "amd64",
+							Payload:  "payload-fast",
+							Metadata: map[string]string{},
+						},
+					},
+				},
+			},
+		},
+		{
+			name:         "discovered channel fails",
+			startChannel: "stable-4.16",
+			arch:         "amd64",
+			responses: map[string]fileResponse{
+				"https://api.openshift.com/api/upgrades_info/graph?channel=stable-4.16&arch=amd64": {filename: "testdata/discover-releases-scenario-2-stable-4.16.json", statusCode: 200},
+				"https://api.openshift.com/api/upgrades_info/graph?channel=fast-4.16&arch=amd64":   {filename: "testdata/discover-releases-scenario-2-fast-4.16.json", statusCode: 500},
+			},
+			minVer:        "4.16.0",
+			minChannelVer: "4.16",
+			prefixes:      []string{"stable-", "fast-"},
+			expected: ReleasesByChannel{
+				"stable-4.16": {
+					"4.16.2": []Release{
+						{
+							Version:  versionOrDie("4.16.2"),
+							Channel:  "stable-4.16",
+							Arch:     "amd64",
+							Payload:  "payload-stable",
+							Metadata: map[string]string{"io.openshift.upgrades.graph.release.channels": "stable-4.16, fast-4.16"},
+						},
+					},
+				},
+			},
+			// TODO: add checking expected err
+		},
+		{
+			name:         "no node meets minVer requirement",
+			startChannel: "stable-4.16",
+			arch:         "amd64",
+			responses: map[string]fileResponse{
+				"https://api.openshift.com/api/upgrades_info/graph?channel=stable-4.16&arch=amd64": {filename: "testdata/discover-releases-scenario-3-stable-4.16.json", statusCode: 200},
+			},
+			minVer:        "4.16.1",
+			minChannelVer: "4.16",
+			prefixes:      []string{"stable-", "fast-"},
+			expected: ReleasesByChannel{
+				"stable-4.16": map[string][]Release{},
+			},
+		},
+		{
+			name:         "discover releases from 4.16.1 to 4.18 via channels 4.17 and 4.18",
+			startChannel: "stable-4.16",
+			arch:         "amd64",
+			responses: map[string]fileResponse{
+				"https://api.openshift.com/api/upgrades_info/graph?channel=stable-4.16&arch=amd64": {filename: "testdata/discover-releases-scenario-4-stable-4.16.json", statusCode: 200},
+				"https://api.openshift.com/api/upgrades_info/graph?channel=stable-4.17&arch=amd64": {filename: "testdata/discover-releases-scenario-4-stable-4.17.json", statusCode: 200},
+				"https://api.openshift.com/api/upgrades_info/graph?channel=stable-4.18&arch=amd64": {filename: "testdata/discover-releases-scenario-4-stable-4.18.json", statusCode: 200},
+			},
+			minVer:        "4.16.1",
+			minChannelVer: "4.16",
+			prefixes:      []string{"stable-"},
+			expected: ReleasesByChannel{
+				"stable-4.16": {
+					"4.16.2": []Release{
+						{
+							Version:  versionOrDie("4.16.2"),
+							Channel:  "stable-4.16",
+							Arch:     "amd64",
+							Payload:  "payload-4.16",
+							Metadata: map[string]string{"io.openshift.upgrades.graph.release.channels": "stable-4.17, stable-4.18"},
+						},
+					},
+				},
+				"stable-4.17": {
+					"4.17.5": []Release{
+						{
+							Version:  versionOrDie("4.17.5"),
+							Channel:  "stable-4.17",
+							Arch:     "amd64",
+							Payload:  "payload-4.17",
+							Metadata: map[string]string{},
+						},
+					},
+				},
+				"stable-4.18": {
+					"4.18.1": []Release{
+						{
+							Version:  versionOrDie("4.18.1"),
+							Channel:  "stable-4.18",
+							Arch:     "amd64",
+							Payload:  "payload-4.18",
+							Metadata: map[string]string{},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			client := &http.Client{
+				Transport: RoundTripFunc(func(req *http.Request) *http.Response {
+					url := req.URL.String()
+					respMapping, ok := tc.responses[url]
+					if !ok {
+						t.Fatalf("No response mapping for URL: %s", url)
+					}
+
+					data, err := os.ReadFile(respMapping.filename)
+					if err != nil {
+						t.Fatalf("Failed to read file %s: %v", respMapping.filename, err)
+					}
+
+					return &http.Response{
+						StatusCode: respMapping.statusCode,
+						Body:       ioutil.NopCloser(bytes.NewReader(data)),
+					}
+				}),
+			}
+
+			minVer, err := semver.NewVersion(tc.minVer)
+			if err != nil {
+				t.Fatalf("Failed to parse minVer: %v", err)
+			}
+			minChannelVer, err := dropPatch(minVer)
+			if err != nil {
+				t.Fatalf("Failed to drop patch from minVer: %v", err)
+			}
+
+			releases := discoverReleases(client, tc.startChannel, minVer, minChannelVer, tc.prefixes, tc.arch)
+			if !reflect.DeepEqual(releases, tc.expected) {
+				t.Errorf("Expected releases %+v, got %+v", tc.expected, releases)
+			}
+		})
+	}
+}

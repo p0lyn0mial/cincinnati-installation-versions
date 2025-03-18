@@ -72,6 +72,8 @@ func dropPatch(v *semver.Version) (*semver.Version, error) {
 
 // discoverReleases discovers new releases from the startChannel and minimum acceptable version.
 // It returns a ReleasesByChannel, with keys as full channel names.
+//
+// TODO: return errs
 func discoverReleases(client *http.Client, startChannel string, minVer, minChannelVer *semver.Version, prefixes []string, arch string) ReleasesByChannel {
 	releasesAgg := make(ReleasesByChannel)
 	processedChannels := make(map[string]bool)
