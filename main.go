@@ -72,68 +72,66 @@ func dropPatch(v *semver.Version) (*semver.Version, error) {
 
 // discoverReleases discovers new releases from the startChannel and minimum acceptable version.
 // It returns a ReleasesByChannel, with keys as full channel names.
-//
-// TODO: return errs
-func discoverReleases(client *http.Client, startChannel string, minVer, minChannelVer *semver.Version, prefixes []string, arch string) ReleasesByChannel {
-	releasesAgg := make(ReleasesByChannel)
-	processedChannels := make(map[string]bool)
-	queuedChannels := make(map[string]bool)
+func discoverReleases(client *http.Client, startChannel string, minVer, minChannelVer *semver.Version, prefixes []string, arch string) (ReleasesByChannel, error) {
+	releasesByChannel := make(ReleasesByChannel)
+	processed := make(map[string]bool)
+	queued := map[string]bool{startChannel: true}
 	queue := []string{startChannel}
-	queuedChannels[startChannel] = true
 
 	for len(queue) > 0 {
-		currentChannel := queue[0]
+		channel := queue[0]
 		queue = queue[1:]
-		if processedChannels[currentChannel] {
+		if processed[channel] {
 			continue
 		}
-		processedChannels[currentChannel] = true
+		processed[channel] = true
 
-		fmt.Printf("Fetching %s graph for channel: %s\n", arch, currentChannel)
-		graph, err := fetchGraph(client, currentChannel, arch)
+		fmt.Printf("Fetching %s graph for channel: %s\n", arch, channel)
+		graph, err := fetchGraph(client, channel, arch)
 		if err != nil {
-			fmt.Printf("Error fetching %s graph for channel %s: %v\n", arch, currentChannel, err)
-			continue
+			return nil, fmt.Errorf("error fetching %s graph for channel %s: %w", arch, channel, err)
 		}
-		if _, exists := releasesAgg[currentChannel]; !exists {
-			releasesAgg[currentChannel] = make(ChannelReleases)
+
+		if _, ok := releasesByChannel[channel]; !ok {
+			releasesByChannel[channel] = make(ChannelReleases)
 		}
+
 		for _, node := range graph.Nodes {
 			if node.Version != nil && node.Version.Compare(minVer) >= 0 {
 				verStr := node.Version.String()
 				r := Release{
 					Version:  node.Version,
-					Channel:  currentChannel,
+					Channel:  channel,
 					Arch:     arch,
 					Payload:  node.Payload,
 					Metadata: node.Metadata,
 				}
-				releasesAgg[currentChannel][verStr] = append(releasesAgg[currentChannel][verStr], r)
+				releasesByChannel[channel][verStr] = append(releasesByChannel[channel][verStr], r)
 			}
-			if channels, ok := node.Metadata["io.openshift.upgrades.graph.release.channels"]; ok {
-				for _, ch := range strings.Split(channels, ",") {
-					ch = strings.TrimSpace(ch)
-					for _, prefix := range prefixes {
-						if strings.HasPrefix(ch, prefix) {
-							channelVer, err := extractSemVersionFromChannel(ch, prefix)
-							if err != nil {
-								fmt.Printf("Error parsing channel version from %s: %v\n", ch, err)
-								continue
-							}
-							if channelVer.Compare(minChannelVer) >= 0 {
-								if !processedChannels[ch] && !queuedChannels[ch] {
-									fmt.Printf("Discovered new channel: %s\n", ch)
-									queue = append(queue, ch)
-									queuedChannels[ch] = true
-								}
-							}
+
+			metaChannels, ok := node.Metadata["io.openshift.upgrades.graph.release.channels"]
+			if !ok {
+				continue
+			}
+			for _, ch := range strings.Split(metaChannels, ",") {
+				ch = strings.TrimSpace(ch)
+				for _, prefix := range prefixes {
+					if strings.HasPrefix(ch, prefix) {
+						channelVer, err := extractSemVersionFromChannel(ch, prefix)
+						if err != nil {
+							return nil, fmt.Errorf("error parsing channel version from %s: %w", ch, err)
+						}
+						if channelVer.Compare(minChannelVer) >= 0 && !processed[ch] && !queued[ch] {
+							fmt.Printf("Discovered new channel: %s\n", ch)
+							queue = append(queue, ch)
+							queued[ch] = true
 						}
 					}
 				}
 			}
 		}
 	}
-	return releasesAgg
+	return releasesByChannel, nil
 }
 
 // fetchReleases fetches releases for a given architecture for the provided slice of channels.
@@ -208,7 +206,11 @@ func main() {
 	client := &http.Client{}
 
 	// Step 1: Discover releases for "amd64".
-	amd64ReleasesRaw := discoverReleases(client, *startChannel, minVer, minChannelVer, prefixes, "amd64")
+	amd64ReleasesRaw, err := discoverReleases(client, *startChannel, minVer, minChannelVer, prefixes, "amd64")
+	if err != nil {
+		fmt.Printf("error discovering releases from %s: %v\n", *startChannel, err)
+		return
+	}
 
 	fmt.Println("\nDiscovered AMD64 releases:")
 	for channel, relMap := range amd64ReleasesRaw {

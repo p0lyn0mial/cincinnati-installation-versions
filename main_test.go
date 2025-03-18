@@ -141,6 +141,7 @@ func TestDiscoverReleases(t *testing.T) {
 		minChannelVer string
 		prefixes      []string
 		expected      ReleasesByChannel
+		expectedError string
 	}{
 		{
 			name:         "discovered additional channel (stable & fast)",
@@ -202,7 +203,7 @@ func TestDiscoverReleases(t *testing.T) {
 					},
 				},
 			},
-			// TODO: add checking expected err
+			expectedError: "error fetching amd64 graph for channel fast-4.16: error: status 500 when fetching data from",
 		},
 		{
 			name:         "no node meets minVer requirement",
@@ -299,7 +300,23 @@ func TestDiscoverReleases(t *testing.T) {
 				t.Fatalf("Failed to drop patch from minVer: %v", err)
 			}
 
-			releases := discoverReleases(client, tc.startChannel, minVer, minChannelVer, tc.prefixes, tc.arch)
+			releases, err := discoverReleases(client, tc.startChannel, minVer, minChannelVer, tc.prefixes, tc.arch)
+
+			//
+			if tc.expectedError != "" {
+				if err == nil {
+					t.Fatalf("Expected error containing %q, but got none", tc.expectedError)
+				}
+				if !strings.Contains(err.Error(), tc.expectedError) {
+					t.Errorf("Expected error containing %q, got %q", tc.expectedError, err.Error())
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Failed to discover releases: %v", err)
+			}
+			//
+
 			if !reflect.DeepEqual(releases, tc.expected) {
 				t.Errorf("Expected releases %+v, got %+v", tc.expected, releases)
 			}
