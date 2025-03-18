@@ -50,7 +50,7 @@ func fetchGraph(client *http.Client, channel, arch string) (*CincinnatiGraph, er
 		return nil, fmt.Errorf("error reading response from %s: %w", url, err)
 	}
 	var graph CincinnatiGraph
-	if err := json.Unmarshal(body, &graph); err != nil {
+	if err = json.Unmarshal(body, &graph); err != nil {
 		return nil, fmt.Errorf("error parsing JSON from %s: %w", url, err)
 	}
 	return &graph, nil
