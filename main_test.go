@@ -156,25 +156,21 @@ func TestDiscoverReleases(t *testing.T) {
 			prefixes:      []string{"stable-", "fast-"},
 			expected: ReleasesByChannel{
 				"stable-4.16": {
-					"4.16.2": []Release{
-						{
-							Version:  versionOrDie("4.16.2"),
-							Channel:  "stable-4.16",
-							Arch:     "amd64",
-							Payload:  "payload-stable",
-							Metadata: map[string]string{"io.openshift.upgrades.graph.release.channels": "stable-4.16, fast-4.16"},
-						},
+					"4.16.2": Release{
+						Version:  versionOrDie("4.16.2"),
+						Channel:  "stable-4.16",
+						Arch:     "amd64",
+						Payload:  "payload-stable",
+						Metadata: map[string]string{"io.openshift.upgrades.graph.release.channels": "stable-4.16, fast-4.16"},
 					},
 				},
 				"fast-4.16": {
-					"4.16.3": []Release{
-						{
-							Version:  versionOrDie("4.16.3"),
-							Channel:  "fast-4.16",
-							Arch:     "amd64",
-							Payload:  "payload-fast",
-							Metadata: map[string]string{},
-						},
+					"4.16.3": Release{
+						Version:  versionOrDie("4.16.3"),
+						Channel:  "fast-4.16",
+						Arch:     "amd64",
+						Payload:  "payload-fast",
+						Metadata: map[string]string{},
 					},
 				},
 			},
@@ -192,14 +188,12 @@ func TestDiscoverReleases(t *testing.T) {
 			prefixes:      []string{"stable-", "fast-"},
 			expected: ReleasesByChannel{
 				"stable-4.16": {
-					"4.16.2": []Release{
-						{
-							Version:  versionOrDie("4.16.2"),
-							Channel:  "stable-4.16",
-							Arch:     "amd64",
-							Payload:  "payload-stable",
-							Metadata: map[string]string{"io.openshift.upgrades.graph.release.channels": "stable-4.16, fast-4.16"},
-						},
+					"4.16.2": Release{
+						Version:  versionOrDie("4.16.2"),
+						Channel:  "stable-4.16",
+						Arch:     "amd64",
+						Payload:  "payload-stable",
+						Metadata: map[string]string{"io.openshift.upgrades.graph.release.channels": "stable-4.16, fast-4.16"},
 					},
 				},
 			},
@@ -216,7 +210,7 @@ func TestDiscoverReleases(t *testing.T) {
 			minChannelVer: "4.16",
 			prefixes:      []string{"stable-", "fast-"},
 			expected: ReleasesByChannel{
-				"stable-4.16": map[string][]Release{},
+				"stable-4.16": map[string]Release{},
 			},
 		},
 		{
@@ -233,36 +227,30 @@ func TestDiscoverReleases(t *testing.T) {
 			prefixes:      []string{"stable-"},
 			expected: ReleasesByChannel{
 				"stable-4.16": {
-					"4.16.2": []Release{
-						{
-							Version:  versionOrDie("4.16.2"),
-							Channel:  "stable-4.16",
-							Arch:     "amd64",
-							Payload:  "payload-4.16",
-							Metadata: map[string]string{"io.openshift.upgrades.graph.release.channels": "stable-4.17, stable-4.18"},
-						},
+					"4.16.2": Release{
+						Version:  versionOrDie("4.16.2"),
+						Channel:  "stable-4.16",
+						Arch:     "amd64",
+						Payload:  "payload-4.16",
+						Metadata: map[string]string{"io.openshift.upgrades.graph.release.channels": "stable-4.17, stable-4.18"},
 					},
 				},
 				"stable-4.17": {
-					"4.17.5": []Release{
-						{
-							Version:  versionOrDie("4.17.5"),
-							Channel:  "stable-4.17",
-							Arch:     "amd64",
-							Payload:  "payload-4.17",
-							Metadata: map[string]string{},
-						},
+					"4.17.5": Release{
+						Version:  versionOrDie("4.17.5"),
+						Channel:  "stable-4.17",
+						Arch:     "amd64",
+						Payload:  "payload-4.17",
+						Metadata: map[string]string{},
 					},
 				},
 				"stable-4.18": {
-					"4.18.1": []Release{
-						{
-							Version:  versionOrDie("4.18.1"),
-							Channel:  "stable-4.18",
-							Arch:     "amd64",
-							Payload:  "payload-4.18",
-							Metadata: map[string]string{},
-						},
+					"4.18.1": Release{
+						Version:  versionOrDie("4.18.1"),
+						Channel:  "stable-4.18",
+						Arch:     "amd64",
+						Payload:  "payload-4.18",
+						Metadata: map[string]string{},
 					},
 				},
 			},
@@ -302,7 +290,6 @@ func TestDiscoverReleases(t *testing.T) {
 
 			releases, err := discoverReleases(client, tc.startChannel, minVer, minChannelVer, tc.prefixes, tc.arch)
 
-			//
 			if tc.expectedError != "" {
 				if err == nil {
 					t.Fatalf("Expected error containing %q, but got none", tc.expectedError)
@@ -315,8 +302,6 @@ func TestDiscoverReleases(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to discover releases: %v", err)
 			}
-			//
-
 			if !reflect.DeepEqual(releases, tc.expected) {
 				t.Errorf("Expected releases %+v, got %+v", tc.expected, releases)
 			}
