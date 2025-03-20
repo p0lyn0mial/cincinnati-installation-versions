@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 
@@ -36,22 +37,30 @@ type ReleasesByChannel map[string]VersionReleases
 
 // fetchGraph fetches the upgrade graph for a given channel and architecture.
 func fetchGraph(client *http.Client, channel, arch string) (*CincinnatiGraph, error) {
-	url := fmt.Sprintf("https://api.openshift.com/api/upgrades_info/graph?channel=%s&arch=%s", channel, arch)
-	resp, err := client.Get(url)
+	u, err := url.Parse("https://api.openshift.com/api/upgrades_info/graph")
 	if err != nil {
-		return nil, fmt.Errorf("error fetching data from %s: %w", url, err)
+		return nil, err
+	}
+	queryParams := u.Query()
+	queryParams.Add("channel", channel)
+	queryParams.Add("arch", arch)
+	u.RawQuery = queryParams.Encode()
+
+	resp, err := client.Get(u.String())
+	if err != nil {
+		return nil, fmt.Errorf("error fetching data from %s: %w", u, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("error: status %d when fetching data from %s", resp.StatusCode, url)
+		return nil, fmt.Errorf("error: status %d when fetching data from %s", resp.StatusCode, u)
 	}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("error reading response from %s: %w", url, err)
+		return nil, fmt.Errorf("error reading response from %s: %w", u, err)
 	}
 	var graph CincinnatiGraph
 	if err = json.Unmarshal(body, &graph); err != nil {
-		return nil, fmt.Errorf("error parsing JSON from %s: %w", url, err)
+		return nil, fmt.Errorf("error parsing JSON from %s: %w", u, err)
 	}
 	return &graph, nil
 }
@@ -64,19 +73,48 @@ func extractSemVersionFromChannel(channel, prefix string) (*semver.Version, erro
 	return semver.NewVersion(trimmed)
 }
 
-// dropPatch returns a semver.Version containing only the major.minor parts.
-func dropPatch(v *semver.Version) (*semver.Version, error) {
-	newVersionStr := fmt.Sprintf("%v.%v", v.Major(), v.Minor())
-	return semver.NewVersion(newVersionStr)
+// splitFastVersion splits the input string into a prefix (including the hyphen)
+// and the version part. It assumes that the input always contains a hyphen.
+func splitChannel(channel string) (string, string, error) {
+	idx := strings.Index(channel, "-")
+	// If the hyphen is not found, return an empty prefix and the original input as version.
+	if idx == -1 {
+		return "", channel, fmt.Errorf("invalid channel format: %s", channel)
+	}
+	prefix := channel[:idx+1]
+	version := channel[idx+1:]
+	return prefix, version, nil
 }
 
 // discoverReleases discovers new releases from the startChannel and minimum acceptable version.
 // It returns a ReleasesByChannel, with keys as full channel names.
-func discoverReleases(client *http.Client, startChannel string, minVer, minChannelVer *semver.Version, prefixes []string, arch string) (ReleasesByChannel, error) {
+func discoverReleases(client *http.Client, startChannels []string, arch string) (ReleasesByChannel, error) {
+	var prefixes []string
+	var minVersion *semver.Version
+	var queue []string
+	queued := map[string]bool{}
+
+	for _, startChannel := range startChannels {
+		channelPrefix, channelVersionStr, err := splitChannel(startChannel)
+		if err != nil {
+			return nil, err
+		}
+		prefixes = append(prefixes, channelPrefix)
+
+		channelVersion, err := semver.NewVersion(channelVersionStr)
+		if err != nil {
+			return nil, err
+		}
+		if minVersion == nil || channelVersion.LessThan(minVersion) {
+			minVersion = channelVersion
+		}
+
+		queued[startChannel] = true
+		queue = append(queue, startChannel)
+	}
+
 	releasesByChannel := make(ReleasesByChannel)
 	processed := make(map[string]bool)
-	queued := map[string]bool{startChannel: true}
-	queue := []string{startChannel}
 
 	for len(queue) > 0 {
 		channel := queue[0]
@@ -97,7 +135,7 @@ func discoverReleases(client *http.Client, startChannel string, minVer, minChann
 		}
 
 		for _, node := range graph.Nodes {
-			if node.Version != nil && node.Version.Compare(minVer) >= 0 {
+			if node.Version != nil && node.Version.Compare(minVersion) >= 0 {
 				verStr := node.Version.String()
 				r := Release{
 					Version:  node.Version,
@@ -121,7 +159,7 @@ func discoverReleases(client *http.Client, startChannel string, minVer, minChann
 						if err != nil {
 							return nil, fmt.Errorf("error parsing channel version from %s: %w", ch, err)
 						}
-						if channelVer.Compare(minChannelVer) >= 0 && !processed[ch] && !queued[ch] {
+						if channelVer.Compare(minVersion) >= 0 && !processed[ch] && !queued[ch] {
 							fmt.Printf("Discovered new channel: %s\n", ch)
 							queue = append(queue, ch)
 							queued[ch] = true
@@ -137,24 +175,11 @@ func discoverReleases(client *http.Client, startChannel string, minVer, minChann
 
 func main() {
 	startChannel := flag.String("channel", "fast-4.16", "Starting channel (e.g. stable-4.16)")
-	minVersion := flag.String("min", "4.16.0", "Minimal version (e.g. 4.16.0 or 4.16.1)")
-	prefixesArg := flag.String("prefixes", "fast-,stable-", "Channel prefixes separated by comma (e.g. fast-,stable-)")
 	flag.Parse()
-	prefixes := strings.Split(*prefixesArg, ",")
 
-	minVer, err := semver.NewVersion(*minVersion)
-	if err != nil {
-		fmt.Printf("Error parsing minimal version %s: %v\n", *minVersion, err)
-		return
-	}
-	minChannelVer, err := dropPatch(minVer)
-	if err != nil {
-		fmt.Printf("Error dropping patch from minimal version %s: %v\n", minVer.String(), err)
-		return
-	}
 	client := &http.Client{}
 
-	multiArchReleasesByChannel, err := discoverReleases(client, *startChannel, minVer, minChannelVer, prefixes, "multi")
+	multiArchReleasesByChannel, err := discoverReleases(client, []string{*startChannel}, "multi")
 	if err != nil {
 		fmt.Printf("error discovering releases from %s: %v\n", *startChannel, err)
 		return

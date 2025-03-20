@@ -43,7 +43,7 @@ func TestFetchGraph(t *testing.T) {
 			channel:     "stable-4.16",
 			arch:        "amd64",
 			statusCode:  200,
-			expectedURL: "https://api.openshift.com/api/upgrades_info/graph?channel=stable-4.16&arch=amd64",
+			expectedURL: "https://api.openshift.com/api/upgrades_info/graph?arch=amd64&channel=stable-4.16",
 			expectedGraph: &CincinnatiGraph{
 				Nodes: []CincinnatiNode{
 					{
@@ -66,7 +66,7 @@ func TestFetchGraph(t *testing.T) {
 			channel:       "stable-4.16",
 			arch:          "amd64",
 			statusCode:    200,
-			expectedURL:   "https://api.openshift.com/api/upgrades_info/graph?channel=stable-4.16&arch=amd64",
+			expectedURL:   "https://api.openshift.com/api/upgrades_info/graph?arch=amd64&channel=stable-4.16",
 			expectedGraph: nil,
 			expectedError: "error parsing JSON",
 		},
@@ -76,7 +76,7 @@ func TestFetchGraph(t *testing.T) {
 			channel:       "stable-4.16",
 			arch:          "amd64",
 			statusCode:    500,
-			expectedURL:   "https://api.openshift.com/api/upgrades_info/graph?channel=stable-4.16&arch=amd64",
+			expectedURL:   "https://api.openshift.com/api/upgrades_info/graph?arch=amd64&channel=stable-4.16",
 			expectedGraph: nil,
 			expectedError: "error: status 500",
 		},
@@ -132,28 +132,22 @@ func TestDiscoverReleases(t *testing.T) {
 	}
 
 	tests := []struct {
-		name         string
-		startChannel string
-		arch         string
+		name          string
+		startChannels []string
+		arch          string
 		// responses maps URL -> fileResponse
 		responses     map[string]fileResponse
-		minVer        string
-		minChannelVer string
-		prefixes      []string
 		expected      ReleasesByChannel
 		expectedError string
 	}{
 		{
-			name:         "discovered additional channel (stable & fast)",
-			startChannel: "stable-4.16",
-			arch:         "amd64",
+			name:          "discovered additional channel (stable & fast)",
+			startChannels: []string{"stable-4.16", "fast-4.16"},
+			arch:          "amd64",
 			responses: map[string]fileResponse{
-				"https://api.openshift.com/api/upgrades_info/graph?channel=stable-4.16&arch=amd64": {filename: "testdata/discover-releases-scenario-1-stable-4.16.json", statusCode: 200},
-				"https://api.openshift.com/api/upgrades_info/graph?channel=fast-4.16&arch=amd64":   {filename: "testdata/discover-releases-scenario-1-fast-4.16.json", statusCode: 200},
+				"https://api.openshift.com/api/upgrades_info/graph?arch=amd64&channel=stable-4.16": {filename: "testdata/discover-releases-scenario-1-stable-4.16.json", statusCode: 200},
+				"https://api.openshift.com/api/upgrades_info/graph?arch=amd64&channel=fast-4.16":   {filename: "testdata/discover-releases-scenario-1-fast-4.16.json", statusCode: 200},
 			},
-			minVer:        "4.16.0",
-			minChannelVer: "4.16",
-			prefixes:      []string{"stable-", "fast-"},
 			expected: ReleasesByChannel{
 				"stable-4.16": {
 					"4.16.2": Release{
@@ -176,16 +170,13 @@ func TestDiscoverReleases(t *testing.T) {
 			},
 		},
 		{
-			name:         "discovered channel fails",
-			startChannel: "stable-4.16",
-			arch:         "amd64",
+			name:          "discovered channel fails",
+			startChannels: []string{"stable-4.16", "fast-4.16"},
+			arch:          "amd64",
 			responses: map[string]fileResponse{
-				"https://api.openshift.com/api/upgrades_info/graph?channel=stable-4.16&arch=amd64": {filename: "testdata/discover-releases-scenario-2-stable-4.16.json", statusCode: 200},
-				"https://api.openshift.com/api/upgrades_info/graph?channel=fast-4.16&arch=amd64":   {filename: "testdata/discover-releases-scenario-2-fast-4.16.json", statusCode: 500},
+				"https://api.openshift.com/api/upgrades_info/graph?arch=amd64&channel=stable-4.16": {filename: "testdata/discover-releases-scenario-2-stable-4.16.json", statusCode: 200},
+				"https://api.openshift.com/api/upgrades_info/graph?arch=amd64&channel=fast-4.16":   {filename: "testdata/discover-releases-scenario-2-fast-4.16.json", statusCode: 500},
 			},
-			minVer:        "4.16.0",
-			minChannelVer: "4.16",
-			prefixes:      []string{"stable-", "fast-"},
 			expected: ReleasesByChannel{
 				"stable-4.16": {
 					"4.16.2": Release{
@@ -200,31 +191,25 @@ func TestDiscoverReleases(t *testing.T) {
 			expectedError: "error fetching amd64 graph for channel fast-4.16: error: status 500 when fetching data from",
 		},
 		{
-			name:         "no node meets minVer requirement",
-			startChannel: "stable-4.16",
-			arch:         "amd64",
+			name:          "no node meets minVer requirement",
+			startChannels: []string{"stable-4.16"},
+			arch:          "amd64",
 			responses: map[string]fileResponse{
-				"https://api.openshift.com/api/upgrades_info/graph?channel=stable-4.16&arch=amd64": {filename: "testdata/discover-releases-scenario-3-stable-4.16.json", statusCode: 200},
+				"https://api.openshift.com/api/upgrades_info/graph?arch=amd64&channel=stable-4.16": {filename: "testdata/discover-releases-scenario-3-stable-4.16.json", statusCode: 200},
 			},
-			minVer:        "4.16.1",
-			minChannelVer: "4.16",
-			prefixes:      []string{"stable-", "fast-"},
 			expected: ReleasesByChannel{
 				"stable-4.16": map[string]Release{},
 			},
 		},
 		{
-			name:         "discover releases from 4.16.1 to 4.18 via channels 4.17 and 4.18",
-			startChannel: "stable-4.16",
-			arch:         "amd64",
+			name:          "discover releases from 4.16.1 to 4.18 via channels 4.17 and 4.18",
+			startChannels: []string{"stable-4.16"},
+			arch:          "amd64",
 			responses: map[string]fileResponse{
-				"https://api.openshift.com/api/upgrades_info/graph?channel=stable-4.16&arch=amd64": {filename: "testdata/discover-releases-scenario-4-stable-4.16.json", statusCode: 200},
-				"https://api.openshift.com/api/upgrades_info/graph?channel=stable-4.17&arch=amd64": {filename: "testdata/discover-releases-scenario-4-stable-4.17.json", statusCode: 200},
-				"https://api.openshift.com/api/upgrades_info/graph?channel=stable-4.18&arch=amd64": {filename: "testdata/discover-releases-scenario-4-stable-4.18.json", statusCode: 200},
+				"https://api.openshift.com/api/upgrades_info/graph?arch=amd64&channel=stable-4.16": {filename: "testdata/discover-releases-scenario-4-stable-4.16.json", statusCode: 200},
+				"https://api.openshift.com/api/upgrades_info/graph?arch=amd64&channel=stable-4.17": {filename: "testdata/discover-releases-scenario-4-stable-4.17.json", statusCode: 200},
+				"https://api.openshift.com/api/upgrades_info/graph?arch=amd64&channel=stable-4.18": {filename: "testdata/discover-releases-scenario-4-stable-4.18.json", statusCode: 200},
 			},
-			minVer:        "4.16.1",
-			minChannelVer: "4.16",
-			prefixes:      []string{"stable-"},
 			expected: ReleasesByChannel{
 				"stable-4.16": {
 					"4.16.2": Release{
@@ -279,16 +264,7 @@ func TestDiscoverReleases(t *testing.T) {
 				}),
 			}
 
-			minVer, err := semver.NewVersion(tc.minVer)
-			if err != nil {
-				t.Fatalf("Failed to parse minVer: %v", err)
-			}
-			minChannelVer, err := dropPatch(minVer)
-			if err != nil {
-				t.Fatalf("Failed to drop patch from minVer: %v", err)
-			}
-
-			releases, err := discoverReleases(client, tc.startChannel, minVer, minChannelVer, tc.prefixes, tc.arch)
+			releases, err := discoverReleases(client, tc.startChannels, tc.arch)
 
 			if tc.expectedError != "" {
 				if err == nil {
