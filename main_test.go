@@ -49,7 +49,7 @@ func TestFetchGraph(t *testing.T) {
 					{
 						Version:  versionOrDie("4.16.1"),
 						Payload:  "example-payload",
-						Metadata: map[string]string{"io.openshift.upgrades.graph.release.channels": "stable-4.16, fast-4.16"},
+						Metadata: map[string]string{"io.openshift.upgrades.graph.release.channels": "stable-4.16,fast-4.16"},
 					},
 					{
 						Version:  versionOrDie("4.16.2"),
@@ -155,7 +155,7 @@ func TestDiscoverReleases(t *testing.T) {
 						Channel:  "stable-4.16",
 						Arch:     "amd64",
 						Payload:  "payload-stable",
-						Metadata: map[string]string{"io.openshift.upgrades.graph.release.channels": "stable-4.16, fast-4.16"},
+						Metadata: map[string]string{"io.openshift.upgrades.graph.release.channels": "stable-4.16,fast-4.16"},
 					},
 				},
 				"fast-4.16": {
@@ -184,7 +184,7 @@ func TestDiscoverReleases(t *testing.T) {
 						Channel:  "stable-4.16",
 						Arch:     "amd64",
 						Payload:  "payload-stable",
-						Metadata: map[string]string{"io.openshift.upgrades.graph.release.channels": "stable-4.16, fast-4.16"},
+						Metadata: map[string]string{"io.openshift.upgrades.graph.release.channels": "stable-4.16,fast-4.16"},
 					},
 				},
 			},
@@ -217,7 +217,7 @@ func TestDiscoverReleases(t *testing.T) {
 						Channel:  "stable-4.16",
 						Arch:     "amd64",
 						Payload:  "payload-4.16",
-						Metadata: map[string]string{"io.openshift.upgrades.graph.release.channels": "stable-4.17, stable-4.18"},
+						Metadata: map[string]string{"io.openshift.upgrades.graph.release.channels": "stable-4.17,stable-4.18"},
 					},
 				},
 				"stable-4.17": {

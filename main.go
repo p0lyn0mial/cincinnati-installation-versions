@@ -73,7 +73,7 @@ func extractSemVersionFromChannel(channel, prefix string) (*semver.Version, erro
 	return semver.NewVersion(trimmed)
 }
 
-// splitFastVersion splits the input string into a prefix (including the hyphen)
+// splitChannel splits the input string into a prefix (including the hyphen)
 // and the version part. It assumes that the input always contains a hyphen.
 func splitChannel(channel string) (string, string, error) {
 	idx := strings.Index(channel, "-")
@@ -86,7 +86,7 @@ func splitChannel(channel string) (string, string, error) {
 	return prefix, version, nil
 }
 
-// discoverReleases discovers new releases from the startChannel and minimum acceptable version.
+// discoverReleases discovers new releases from the startChannels for the given arch.
 // It returns a ReleasesByChannel, with keys as full channel names.
 func discoverReleases(client *http.Client, startChannels []string, arch string) (ReleasesByChannel, error) {
 	var prefixes []string

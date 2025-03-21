@@ -5,7 +5,7 @@
       "version": "4.16.1",
       "payload": "example-payload",
       "metadata": {
-        "io.openshift.upgrades.graph.release.channels": "stable-4.16, fast-4.16"
+        "io.openshift.upgrades.graph.release.channels": "stable-4.16,fast-4.16"
       }
     },
     {
