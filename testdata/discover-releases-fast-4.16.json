@@ -1,6 +1,11 @@
 {
   "nodes": [
     {
+      "version": "4.16.3",
+      "payload": "payload-fast",
+      "metadata": {}
+    },
+    {
       "version": "4.16.2",
       "payload": "payload-stable",
       "metadata": {
