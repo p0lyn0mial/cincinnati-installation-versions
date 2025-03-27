@@ -88,29 +88,21 @@ func splitChannel(channel string) (string, string, error) {
 
 // discoverReleases discovers new releases from the startChannels for the given arch.
 // It returns a ReleasesByChannel, with keys as full channel names.
-func discoverReleases(client *http.Client, startChannels []string, arch string) (ReleasesByChannel, error) {
-	var prefixes []string
-	var minVersion *semver.Version
-	var queue []string
-	queued := map[string]bool{}
+func discoverReleases(client *http.Client, startChannel string, arch string) (ReleasesByChannel, error) {
+	prefix, channelVersionStr, err := splitChannel(startChannel)
+	if err != nil {
+		return nil, err
+	}
 
-	for _, startChannel := range startChannels {
-		channelPrefix, channelVersionStr, err := splitChannel(startChannel)
-		if err != nil {
-			return nil, err
-		}
-		prefixes = append(prefixes, channelPrefix)
+	channelVersion, err := semver.NewVersion(channelVersionStr)
+	if err != nil {
+		return nil, err
+	}
+	minVersion := channelVersion
 
-		channelVersion, err := semver.NewVersion(channelVersionStr)
-		if err != nil {
-			return nil, err
-		}
-		if minVersion == nil || channelVersion.LessThan(minVersion) {
-			minVersion = channelVersion
-		}
-
-		queued[startChannel] = true
-		queue = append(queue, startChannel)
+	queue := []string{startChannel}
+	queued := map[string]bool{
+		startChannel: true,
 	}
 
 	releasesByChannel := make(ReleasesByChannel)
@@ -124,7 +116,6 @@ func discoverReleases(client *http.Client, startChannels []string, arch string) 
 		}
 		processed[channel] = true
 
-		fmt.Printf("Fetching %s graph for channel: %s\n", arch, channel)
 		graph, err := fetchGraph(client, channel, arch)
 		if err != nil {
 			return nil, fmt.Errorf("error fetching %s graph for channel %s: %w", arch, channel, err)
@@ -153,17 +144,14 @@ func discoverReleases(client *http.Client, startChannels []string, arch string) 
 			}
 			for _, ch := range strings.Split(metaChannels, ",") {
 				ch = strings.TrimSpace(ch)
-				for _, prefix := range prefixes {
-					if strings.HasPrefix(ch, prefix) {
-						channelVer, err := extractSemVersionFromChannel(ch, prefix)
-						if err != nil {
-							return nil, fmt.Errorf("error parsing channel version from %s: %w", ch, err)
-						}
-						if channelVer.Compare(minVersion) >= 0 && !processed[ch] && !queued[ch] {
-							fmt.Printf("Discovered new channel: %s\n", ch)
-							queue = append(queue, ch)
-							queued[ch] = true
-						}
+				if strings.HasPrefix(ch, prefix) {
+					channelVer, err := extractSemVersionFromChannel(ch, prefix)
+					if err != nil {
+						return nil, fmt.Errorf("error parsing channel version from %s: %w", ch, err)
+					}
+					if channelVer.Compare(minVersion) >= 0 && !processed[ch] && !queued[ch] {
+						queue = append(queue, ch)
+						queued[ch] = true
 					}
 				}
 			}
@@ -179,7 +167,7 @@ func main() {
 
 	client := &http.Client{}
 
-	multiArchReleasesByChannel, err := discoverReleases(client, []string{*startChannel}, "multi")
+	multiArchReleasesByChannel, err := discoverReleases(client, *startChannel, "multi")
 	if err != nil {
 		fmt.Printf("error discovering releases from %s: %v\n", *startChannel, err)
 		return

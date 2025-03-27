@@ -132,18 +132,18 @@ func TestDiscoverReleases(t *testing.T) {
 	}
 
 	tests := []struct {
-		name          string
-		startChannels []string
-		arch          string
+		name         string
+		startChannel string
+		arch         string
 		// responses maps URL -> fileResponse
 		responses     map[string]fileResponse
 		expected      ReleasesByChannel
 		expectedError string
 	}{
 		{
-			name:          "discovers only a single channel (even if multiple are available)",
-			startChannels: []string{"stable-4.16"},
-			arch:          "amd64",
+			name:         "discovers only a single channel (even if multiple are available)",
+			startChannel: "stable-4.16",
+			arch:         "amd64",
 			responses: map[string]fileResponse{
 				"https://api.openshift.com/api/upgrades_info/graph?arch=amd64&channel=stable-4.16": {filename: "testdata/discover-releases-stable-4.16.json", statusCode: 200},
 			},
@@ -160,41 +160,11 @@ func TestDiscoverReleases(t *testing.T) {
 			},
 		},
 		{
-			name:          "discovers multiple channels (stable & candidate)",
-			startChannels: []string{"stable-4.16", "candidate-4.16"},
-			arch:          "amd64",
+			name:         "fails to discover a channel",
+			startChannel: "fast-4.16",
+			arch:         "amd64",
 			responses: map[string]fileResponse{
-				"https://api.openshift.com/api/upgrades_info/graph?arch=amd64&channel=stable-4.16":    {filename: "testdata/discover-releases-stable-4.16.json", statusCode: 200},
-				"https://api.openshift.com/api/upgrades_info/graph?arch=amd64&channel=candidate-4.16": {filename: "testdata/discover-releases-candidate-4.16.json", statusCode: 200},
-			},
-			expected: ReleasesByChannel{
-				"stable-4.16": {
-					"4.16.2": Release{
-						Version:  versionOrDie("4.16.2"),
-						Channel:  "stable-4.16",
-						Arch:     "amd64",
-						Payload:  "payload-stable",
-						Metadata: map[string]string{"io.openshift.upgrades.graph.release.channels": "stable-4.16,fast-4.16"},
-					},
-				},
-				"candidate-4.16": {
-					"4.16.3": Release{
-						Version:  versionOrDie("4.16.3"),
-						Channel:  "candidate-4.16",
-						Arch:     "amd64",
-						Payload:  "payload-candidate",
-						Metadata: map[string]string{},
-					},
-				},
-			},
-		},
-		{
-			name:          "fails to discover a channel",
-			startChannels: []string{"stable-4.16", "fast-4.16"},
-			arch:          "amd64",
-			responses: map[string]fileResponse{
-				"https://api.openshift.com/api/upgrades_info/graph?arch=amd64&channel=stable-4.16": {filename: "testdata/discover-releases-stable-4.16.json", statusCode: 200},
-				"https://api.openshift.com/api/upgrades_info/graph?arch=amd64&channel=fast-4.16":   {filename: "testdata/discover-releases-fast-4.16.json", statusCode: 500},
+				"https://api.openshift.com/api/upgrades_info/graph?arch=amd64&channel=fast-4.16": {filename: "testdata/discover-releases-fast-4.16.json", statusCode: 500},
 			},
 			expected: ReleasesByChannel{
 				"stable-4.16": {
@@ -210,9 +180,9 @@ func TestDiscoverReleases(t *testing.T) {
 			expectedError: "error fetching amd64 graph for channel fast-4.16: error: status 500 when fetching data from",
 		},
 		{
-			name:          "discover releases from 4.16.1 to 4.18 via channels 4.17 and 4.18",
-			startChannels: []string{"stable-4.16"},
-			arch:          "amd64",
+			name:         "discover releases from 4.16.1 to 4.18 via channels 4.17 and 4.18",
+			startChannel: "stable-4.16",
+			arch:         "amd64",
 			responses: map[string]fileResponse{
 				"https://api.openshift.com/api/upgrades_info/graph?arch=amd64&channel=stable-4.16": {filename: "testdata/discover-releases-stable-4.16-with-4.17-4.18.json", statusCode: 200},
 				"https://api.openshift.com/api/upgrades_info/graph?arch=amd64&channel=stable-4.17": {filename: "testdata/discover-releases-stable-4.17.json", statusCode: 200},
@@ -272,7 +242,7 @@ func TestDiscoverReleases(t *testing.T) {
 				}),
 			}
 
-			releases, err := discoverReleases(client, tc.startChannels, tc.arch)
+			releases, err := discoverReleases(client, tc.startChannel, tc.arch)
 
 			if tc.expectedError != "" {
 				if err == nil {
