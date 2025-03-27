@@ -1,0 +1,9 @@
+{
+  "nodes": [
+    {
+      "version": "4.16.3",
+      "payload": "payload-candidate",
+      "metadata": {}
+    }
+  ]
+}
