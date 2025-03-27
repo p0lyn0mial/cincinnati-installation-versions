@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"reflect"
 	"strings"
@@ -29,6 +30,7 @@ func (f RoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 func TestFetchGraph(t *testing.T) {
 	tests := []struct {
 		name          string
+		graphURL      *url.URL
 		inputFile     string
 		channel       string
 		arch          string
@@ -38,7 +40,15 @@ func TestFetchGraph(t *testing.T) {
 		expectedError string
 	}{
 		{
+			name:          "no graph url provided",
+			inputFile:     "testdata/fetch-graph-valid-response.json",
+			channel:       "stable-4.16",
+			arch:          "amd64",
+			expectedError: "cincinnati graph URL is required",
+		},
+		{
 			name:        "Valid response for amd64",
+			graphURL:    rawURLtoURLOrDie("https://api.openshift.com/api/upgrades_info/graph"),
 			inputFile:   "testdata/fetch-graph-valid-response.json",
 			channel:     "stable-4.16",
 			arch:        "amd64",
@@ -62,6 +72,7 @@ func TestFetchGraph(t *testing.T) {
 		},
 		{
 			name:          "Invalid JSON response",
+			graphURL:      rawURLtoURLOrDie("https://api.openshift.com/api/upgrades_info/graph"),
 			inputFile:     "testdata/fetch-graph-invalid-response.json",
 			channel:       "stable-4.16",
 			arch:          "amd64",
@@ -72,6 +83,7 @@ func TestFetchGraph(t *testing.T) {
 		},
 		{
 			name:          "Non-200 status code response",
+			graphURL:      rawURLtoURLOrDie("https://api.openshift.com/api/upgrades_info/graph"),
 			inputFile:     "testdata/fetch-graph-valid-response.json",
 			channel:       "stable-4.16",
 			arch:          "amd64",
@@ -102,7 +114,7 @@ func TestFetchGraph(t *testing.T) {
 				}),
 			}
 
-			graph, err := fetchGraph(client, tc.channel, tc.arch)
+			graph, err := fetchGraph(client, tc.graphURL, tc.channel, tc.arch)
 			if tc.expectedError != "" {
 				if err == nil {
 					t.Fatalf("Expected error containing %q, but got none", tc.expectedError)
@@ -133,6 +145,7 @@ func TestDiscoverReleases(t *testing.T) {
 
 	tests := []struct {
 		name         string
+		graphURL     *url.URL
 		startChannel string
 		arch         string
 		// responses maps URL -> fileResponse
@@ -142,6 +155,7 @@ func TestDiscoverReleases(t *testing.T) {
 	}{
 		{
 			name:         "discovers only a single channel (even if multiple are available)",
+			graphURL:     rawURLtoURLOrDie("https://api.openshift.com/api/upgrades_info/graph"),
 			startChannel: "stable-4.16",
 			arch:         "amd64",
 			responses: map[string]fileResponse{
@@ -161,6 +175,7 @@ func TestDiscoverReleases(t *testing.T) {
 		},
 		{
 			name:         "fails to discover a channel",
+			graphURL:     rawURLtoURLOrDie("https://api.openshift.com/api/upgrades_info/graph"),
 			startChannel: "fast-4.16",
 			arch:         "amd64",
 			responses: map[string]fileResponse{
@@ -181,6 +196,7 @@ func TestDiscoverReleases(t *testing.T) {
 		},
 		{
 			name:         "discover releases from 4.16.1 to 4.18 via channels 4.17 and 4.18",
+			graphURL:     rawURLtoURLOrDie("https://api.openshift.com/api/upgrades_info/graph"),
 			startChannel: "stable-4.16",
 			arch:         "amd64",
 			responses: map[string]fileResponse{
@@ -242,7 +258,7 @@ func TestDiscoverReleases(t *testing.T) {
 				}),
 			}
 
-			releases, err := discoverReleases(client, tc.startChannel, tc.arch)
+			releases, err := discoverReleases(client, tc.graphURL, tc.startChannel, tc.arch)
 
 			if tc.expectedError != "" {
 				if err == nil {
@@ -261,4 +277,12 @@ func TestDiscoverReleases(t *testing.T) {
 			}
 		})
 	}
+}
+
+func rawURLtoURLOrDie(rawURL string) *url.URL {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		panic(err)
+	}
+	return u
 }
