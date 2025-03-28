@@ -36,31 +36,37 @@ type VersionReleases map[string]Release
 type ReleasesByChannel map[string]VersionReleases
 
 // fetchGraph fetches the upgrade graph for a given channel and architecture.
-func fetchGraph(client *http.Client, channel, arch string) (*CincinnatiGraph, error) {
-	u, err := url.Parse("https://api.openshift.com/api/upgrades_info/graph")
-	if err != nil {
-		return nil, err
+func fetchGraph(client *http.Client, u *url.URL, channel, arch string) (*CincinnatiGraph, error) {
+	if u == nil {
+		return nil, fmt.Errorf("cincinnati graph URL is required")
 	}
-	queryParams := u.Query()
+	modURL := *u
+	queryParams := modURL.Query()
 	queryParams.Add("channel", channel)
 	queryParams.Add("arch", arch)
-	u.RawQuery = queryParams.Encode()
+	modURL.RawQuery = queryParams.Encode()
 
-	resp, err := client.Get(u.String())
+	req, err := http.NewRequest("GET", modURL.String(), nil)
 	if err != nil {
-		return nil, fmt.Errorf("error fetching data from %s: %w", u, err)
+		return nil, fmt.Errorf("error creating request for %s: %w", modURL.String(), err)
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("error fetching data from %s: %w", modURL.String(), err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("error: status %d when fetching data from %s", resp.StatusCode, u)
+		return nil, fmt.Errorf("error: status %d when fetching data from %s", resp.StatusCode, modURL.String())
 	}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("error reading response from %s: %w", u, err)
+		return nil, fmt.Errorf("error reading response from %s: %w", modURL.String(), err)
 	}
 	var graph CincinnatiGraph
 	if err = json.Unmarshal(body, &graph); err != nil {
-		return nil, fmt.Errorf("error parsing JSON from %s: %w", u, err)
+		return nil, fmt.Errorf("error parsing JSON from %s: %w", modURL.String(), err)
 	}
 	return &graph, nil
 }
@@ -88,7 +94,7 @@ func splitChannel(channel string) (string, string, error) {
 
 // discoverReleases discovers new releases from the startChannels for the given arch.
 // It returns a ReleasesByChannel, with keys as full channel names.
-func discoverReleases(client *http.Client, startChannel string, arch string) (ReleasesByChannel, error) {
+func discoverReleases(client *http.Client, graphURL *url.URL, startChannel string, arch string) (ReleasesByChannel, error) {
 	prefix, channelVersionStr, err := splitChannel(startChannel)
 	if err != nil {
 		return nil, err
@@ -116,7 +122,7 @@ func discoverReleases(client *http.Client, startChannel string, arch string) (Re
 		}
 		processed[channel] = true
 
-		graph, err := fetchGraph(client, channel, arch)
+		graph, err := fetchGraph(client, graphURL, channel, arch)
 		if err != nil {
 			return nil, fmt.Errorf("error fetching %s graph for channel %s: %w", arch, channel, err)
 		}
@@ -165,9 +171,14 @@ func main() {
 	startChannel := flag.String("channel", "fast-4.16", "Starting channel (e.g. stable-4.16)")
 	flag.Parse()
 
-	client := &http.Client{}
+	u, err := url.Parse("https://api.openshift.com/api/upgrades_info/graph")
+	if err != nil {
+		fmt.Printf("error parsing URL: %s\n", err)
+		return
+	}
 
-	multiArchReleasesByChannel, err := discoverReleases(client, *startChannel, "multi")
+	client := &http.Client{}
+	multiArchReleasesByChannel, err := discoverReleases(client, u, *startChannel, "multi")
 	if err != nil {
 		fmt.Printf("error discovering releases from %s: %v\n", *startChannel, err)
 		return
