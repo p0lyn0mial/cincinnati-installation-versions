@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/google/go-cmp/cmp"
 )
 
 func versionOrDie(v string) *semver.Version {
@@ -234,6 +235,46 @@ func TestDiscoverReleases(t *testing.T) {
 				},
 			},
 		},
+
+		{
+			name:         "single channel with edges",
+			graphURL:     rawURLtoURLOrDie("https://api.openshift.com/api/upgrades_info/graph"),
+			startChannel: "stable-4.16",
+			arch:         "amd64",
+			responses: map[string]fileResponse{
+				"https://api.openshift.com/api/upgrades_info/graph?arch=amd64&channel=stable-4.16": {
+					filename:   "testdata/discover-releases-stable-4.16-edges.json",
+					statusCode: 200,
+				},
+			},
+			expected: ReleasesByChannel{
+				"stable-4.16": VersionReleases{
+					"4.16.1": Release{
+						Version:           versionOrDie("4.16.1"),
+						Channel:           "stable-4.16",
+						Arch:              "amd64",
+						Payload:           "payload-4.16.1",
+						AvailableUpgrades: []string{"4.16.2", "4.16.5"},
+						Metadata:          map[string]string{},
+					},
+					"4.16.2": Release{
+						Version:           versionOrDie("4.16.2"),
+						Channel:           "stable-4.16",
+						Arch:              "amd64",
+						Payload:           "payload-4.16.2",
+						AvailableUpgrades: []string{"4.16.5"},
+						Metadata:          map[string]string{},
+					},
+					"4.16.5": Release{
+						Version:  versionOrDie("4.16.5"),
+						Channel:  "stable-4.16",
+						Arch:     "amd64",
+						Payload:  "payload-4.16.5",
+						Metadata: map[string]string{},
+					},
+				},
+			},
+		},
 	}
 
 	for _, tc := range tests {
@@ -272,8 +313,8 @@ func TestDiscoverReleases(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to discover releases: %v", err)
 			}
-			if !reflect.DeepEqual(releases, tc.expected) {
-				t.Errorf("Expected releases %+v, got %+v", tc.expected, releases)
+			if diff := cmp.Diff(tc.expected, releases); diff != "" {
+				t.Errorf("Releases mismatch (-expected +got):\n%s", diff)
 			}
 		})
 	}
