@@ -166,7 +166,7 @@ func discoverReleases(client *http.Client, graphURL *url.URL, startChannel strin
 		}
 
 		for _, node := range graph.Nodes {
-			if node.Version != nil && node.Version.Compare(minVersion) >= 0 {
+			if isValidVersion(node.Version, minVersion) {
 				verStr := node.Version.String()
 				r := Release{
 					Version:  node.Version,
@@ -258,7 +258,14 @@ func aggregateReleasesByChannelGroup(releasesByChannel ReleasesByChannel) Releas
 			aggregated[group] = make(VersionReleases)
 		}
 		for version, release := range versionMap {
-			if _, exists := aggregated[group][version]; !exists {
+			if existing, exists := aggregated[group][version]; exists {
+				for _, up := range release.AvailableUpgrades {
+					if !slices.Contains(existing.AvailableUpgrades, up) {
+						existing.AvailableUpgrades = append(existing.AvailableUpgrades, up)
+					}
+				}
+				aggregated[group][version] = existing
+			} else {
 				aggregated[group][version] = release
 			}
 		}
