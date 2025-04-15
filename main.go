@@ -26,12 +26,11 @@ type CincinnatiNode struct {
 }
 
 type Release struct {
-	Version           *semver.Version
+	Version           string
 	Channel           string
 	Arch              string
 	Payload           string
 	AvailableUpgrades []string
-	Metadata          map[string]string
 }
 
 type VersionReleases map[string]Release
@@ -129,16 +128,16 @@ func processEdges(graph *CincinnatiGraph, minVersion *semver.Version, releases V
 // discoverReleases discovers new releases from the startChannels for the given arch.
 // It returns a ReleasesByChannel, with keys as full channel names.
 func discoverReleases(client *http.Client, graphURL *url.URL, startChannel string, arch string) (ReleasesByChannel, error) {
-	prefix, channelVersionStr, err := splitChannel(startChannel)
+	startChannelPrefix, startChannelVersionStr, err := splitChannel(startChannel)
 	if err != nil {
 		return nil, err
 	}
 
-	channelVersion, err := semver.NewVersion(channelVersionStr)
+	startChannelVersion, err := semver.NewVersion(startChannelVersionStr)
 	if err != nil {
 		return nil, err
 	}
-	minVersion := channelVersion
+	minVersion := startChannelVersion
 
 	queue := []string{startChannel}
 	queued := map[string]bool{
@@ -169,11 +168,10 @@ func discoverReleases(client *http.Client, graphURL *url.URL, startChannel strin
 			if isValidVersion(node.Version, minVersion) {
 				verStr := node.Version.String()
 				r := Release{
-					Version:  node.Version,
-					Channel:  channel,
-					Arch:     arch,
-					Payload:  node.Payload,
-					Metadata: node.Metadata,
+					Version: node.Version.String(),
+					Channel: channel,
+					Arch:    arch,
+					Payload: node.Payload,
 				}
 				releasesByChannel[channel][verStr] = r
 			}
@@ -184,8 +182,8 @@ func discoverReleases(client *http.Client, graphURL *url.URL, startChannel strin
 			}
 			for _, ch := range strings.Split(metaChannels, ",") {
 				ch = strings.TrimSpace(ch)
-				if strings.HasPrefix(ch, prefix) {
-					channelVer, err := extractSemVersionFromChannel(ch, prefix)
+				if strings.HasPrefix(ch, startChannelPrefix) {
+					channelVer, err := extractSemVersionFromChannel(ch, startChannelPrefix)
 					if err != nil {
 						return nil, fmt.Errorf("error parsing channel version from %s: %w", ch, err)
 					}
