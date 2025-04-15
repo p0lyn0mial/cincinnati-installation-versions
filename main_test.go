@@ -12,6 +12,7 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
 func versionOrDie(v string) *semver.Version {
@@ -315,6 +316,148 @@ func TestDiscoverReleases(t *testing.T) {
 			}
 			if diff := cmp.Diff(tc.expected, releases); diff != "" {
 				t.Errorf("Releases mismatch (-expected +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestAggregateReleasesByChannelGroup(t *testing.T) {
+	type testCase struct {
+		name     string
+		input    ReleasesByChannel
+		expected ReleasesByChannel
+	}
+
+	testCases := []testCase{
+		{
+			name: "single channel, no merging",
+			input: ReleasesByChannel{
+				"stable-4.16": VersionReleases{
+					"4.16.1": Release{
+						Version:           versionOrDie("4.16.1"),
+						Channel:           "stable-4.16",
+						Arch:              "amd64",
+						Payload:           "p1",
+						AvailableUpgrades: []string{"4.16.2"},
+					},
+				},
+			},
+			expected: ReleasesByChannel{
+				"stable": VersionReleases{
+					"4.16.1": Release{
+						Version:           versionOrDie("4.16.1"),
+						Channel:           "stable-4.16",
+						Arch:              "amd64",
+						Payload:           "p1",
+						AvailableUpgrades: []string{"4.16.2"},
+					},
+				},
+			},
+		},
+		{
+			name: "two channels with same prefix - merging AvailableUpgrades",
+			input: ReleasesByChannel{
+				"stable-4.16": VersionReleases{
+					"4.16.1": Release{
+						Version:           versionOrDie("4.16.1"),
+						Channel:           "stable-4.16",
+						Arch:              "amd64",
+						Payload:           "p1",
+						AvailableUpgrades: []string{"4.16.2"},
+					},
+					"4.16.2": Release{
+						Version:           versionOrDie("4.16.2"),
+						Channel:           "stable-4.16",
+						Arch:              "amd64",
+						Payload:           "p2",
+						AvailableUpgrades: []string{},
+					},
+				},
+				"stable-4.17": VersionReleases{
+					"4.16.1": Release{
+						Version:           versionOrDie("4.16.1"),
+						Channel:           "stable-4.17",
+						Arch:              "amd64",
+						Payload:           "p1",
+						AvailableUpgrades: []string{"4.16.5"},
+					},
+					"4.16.3": Release{
+						Version:           versionOrDie("4.16.3"),
+						Channel:           "stable-4.17",
+						Arch:              "amd64",
+						Payload:           "p3",
+						AvailableUpgrades: []string{"4.16.7"},
+					},
+				},
+			},
+			expected: ReleasesByChannel{
+				"stable": VersionReleases{
+					"4.16.1": Release{
+						Version:           versionOrDie("4.16.1"),
+						Channel:           "stable-4.16",
+						Arch:              "amd64",
+						Payload:           "p1",
+						AvailableUpgrades: []string{"4.16.2", "4.16.5"},
+					},
+					"4.16.2": Release{
+						Version:           versionOrDie("4.16.2"),
+						Channel:           "stable-4.16",
+						Arch:              "amd64",
+						Payload:           "p2",
+						AvailableUpgrades: []string{},
+					},
+					"4.16.3": Release{
+						Version:           versionOrDie("4.16.3"),
+						Channel:           "stable-4.17",
+						Arch:              "amd64",
+						Payload:           "p3",
+						AvailableUpgrades: []string{"4.16.7"},
+					},
+				},
+			},
+		},
+		{
+			name: "merge AvailableUpgrades without duplications",
+			input: ReleasesByChannel{
+				"stable-4.16": VersionReleases{
+					"4.16.1": Release{
+						Version:           versionOrDie("4.16.1"),
+						Channel:           "stable-4.16",
+						Arch:              "amd64",
+						Payload:           "p1",
+						AvailableUpgrades: []string{"4.16.2"},
+					},
+				},
+				"stable-4.17": VersionReleases{
+					"4.16.1": Release{
+						Version:           versionOrDie("4.16.1"),
+						Channel:           "stable-4.17",
+						Arch:              "amd64",
+						Payload:           "p1",
+						AvailableUpgrades: []string{"4.16.2", "4.16.5"},
+					},
+				},
+			},
+			expected: ReleasesByChannel{
+				"stable": VersionReleases{
+					"4.16.1": Release{
+						Version:           versionOrDie("4.16.1"),
+						Channel:           "stable-4.16",
+						Arch:              "amd64",
+						Payload:           "p1",
+						AvailableUpgrades: []string{"4.16.2", "4.16.5"},
+					},
+				},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := aggregateReleasesByChannelGroup(tc.input)
+
+			if diff := cmp.Diff(result, tc.expected, cmpopts.IgnoreFields(Release{}, "Channel")); diff != "" {
+				t.Errorf("Unexpected output (-expected +got):\n%s", diff)
 			}
 		})
 	}
