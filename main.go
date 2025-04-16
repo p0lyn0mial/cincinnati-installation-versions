@@ -125,6 +125,42 @@ func processEdges(graph *CincinnatiGraph, minVersion *semver.Version, releases V
 	return nil
 }
 
+// createRelease simply creates a release from the given node.
+func createRelease(node CincinnatiNode, channel, arch string, minVersion *semver.Version) (Release, bool) {
+	if !isValidVersion(node.Version, minVersion) {
+		return Release{}, false
+	}
+	r := Release{
+		Version: node.Version.String(),
+		Channel: channel,
+		Arch:    arch,
+		Payload: node.Payload,
+	}
+	return r, true
+}
+
+// discoverNewChannels checks node's metadata and returns new channels that match the condition.
+func discoverNewChannels(node CincinnatiNode, startChannelPrefix string, minVersion *semver.Version) []string {
+	var newCh []string
+	meta, ok := node.Metadata["io.openshift.upgrades.graph.release.channels"]
+	if !ok {
+		return newCh
+	}
+	for _, ch := range strings.Split(meta, ",") {
+		ch = strings.TrimSpace(ch)
+		if strings.HasPrefix(ch, startChannelPrefix) {
+			channelVer, err := extractSemVersionFromChannel(ch, startChannelPrefix)
+			if err != nil {
+				continue
+			}
+			if isValidVersion(channelVer, minVersion) {
+				newCh = append(newCh, ch)
+			}
+		}
+	}
+	return newCh
+}
+
 // discoverReleases discovers new releases from the startChannels for the given arch.
 // It returns a ReleasesByChannel, with keys as full channel names.
 func discoverReleases(client *http.Client, graphURL *url.URL, startChannel string, arch string) (ReleasesByChannel, error) {
@@ -165,41 +201,21 @@ func discoverReleases(client *http.Client, graphURL *url.URL, startChannel strin
 		}
 
 		for _, node := range graph.Nodes {
-			if isValidVersion(node.Version, minVersion) {
-				verStr := node.Version.String()
-				r := Release{
-					Version: node.Version.String(),
-					Channel: channel,
-					Arch:    arch,
-					Payload: node.Payload,
-				}
-				releasesByChannel[channel][verStr] = r
+			if r, found := createRelease(node, channel, arch, minVersion); found {
+				releasesByChannel[channel][r.Version] = r
 			}
-
-			metaChannels, ok := node.Metadata["io.openshift.upgrades.graph.release.channels"]
-			if !ok {
-				continue
-			}
-			for _, ch := range strings.Split(metaChannels, ",") {
-				ch = strings.TrimSpace(ch)
-				if strings.HasPrefix(ch, startChannelPrefix) {
-					channelVer, err := extractSemVersionFromChannel(ch, startChannelPrefix)
-					if err != nil {
-						return nil, fmt.Errorf("error parsing channel version from %s: %w", ch, err)
-					}
-					if channelVer.Compare(minVersion) >= 0 && !processed[ch] && !queued[ch] {
-						queue = append(queue, ch)
-						queued[ch] = true
-					}
+			newChannels := discoverNewChannels(node, startChannelPrefix, minVersion)
+			for _, ch := range newChannels {
+				if !queued[ch] && !processed[ch] {
+					queue = append(queue, ch)
+					queued[ch] = true
 				}
 			}
 		}
-
 		if err = processEdges(graph, minVersion, releasesByChannel[channel]); err != nil {
 			return nil, err
 		}
 	}
-
 	return releasesByChannel, nil
 }
 
