@@ -15,14 +15,29 @@ import (
 )
 
 type CincinnatiGraph struct {
-	Nodes []CincinnatiNode `json:"nodes"`
-	Edges [][]int          `json:"edges"`
+	Nodes            []CincinnatiNode   `json:"nodes"`
+	Edges            [][]int            `json:"edges"`
+	ConditionalEdges []ConditionalEdges `json:"conditionalEdges"`
 }
 
 type CincinnatiNode struct {
 	Version  *semver.Version   `json:"version"`
 	Payload  string            `json:"payload"`
 	Metadata map[string]string `json:"metadata"`
+}
+
+type Risk struct {
+	Name string `json:"name"`
+}
+
+type ConditionalEdge struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+}
+
+type ConditionalEdges struct {
+	Edges []ConditionalEdge `json:"edges"`
+	Risks []Risk            `json:"risks"`
 }
 
 type Release struct {
@@ -125,6 +140,35 @@ func processEdges(graph *CincinnatiGraph, minVersion *semver.Version, releases V
 	return nil
 }
 
+// processConditionalEdges processes conditional edges.
+// For each conditional edge group, it checks that every risk in the group is accepted.
+// Only if all risks are accepted, the function adds the upgrade to the AvailableUpgrades.
+func processConditionalEdges(conditionalEdges []ConditionalEdges, allowedConditionalEdgeRisks []string, releases VersionReleases) {
+	for _, group := range conditionalEdges {
+		allAccepted := true
+		for _, risk := range group.Risks {
+			if !slices.Contains(allowedConditionalEdgeRisks, risk.Name) {
+				allAccepted = false
+				break
+			}
+		}
+		if !allAccepted {
+			continue
+		}
+
+		for _, edge := range group.Edges {
+			fromVerStr := edge.From
+			toVerStr := edge.To
+			if r, ok := releases[fromVerStr]; ok {
+				if !slices.Contains(r.AvailableUpgrades, toVerStr) {
+					r.AvailableUpgrades = append(r.AvailableUpgrades, toVerStr)
+					releases[fromVerStr] = r
+				}
+			}
+		}
+	}
+}
+
 // createRelease simply creates a release from the given node.
 func createRelease(node CincinnatiNode, channel, arch string, minVersion *semver.Version) (Release, bool) {
 	if !isValidVersion(node.Version, minVersion) {
@@ -163,7 +207,7 @@ func discoverNewChannels(node CincinnatiNode, startChannelPrefix string, minVers
 
 // discoverReleases discovers new releases from the startChannels for the given arch.
 // It returns a ReleasesByChannel, with keys as full channel names.
-func discoverReleases(client *http.Client, graphURL *url.URL, startChannel string, arch string) (ReleasesByChannel, error) {
+func discoverReleases(client *http.Client, graphURL *url.URL, startChannel string, arch string, allowedConditionalEdgeRisks []string) (ReleasesByChannel, error) {
 	startChannelPrefix, startChannelVersionStr, err := splitChannel(startChannel)
 	if err != nil {
 		return nil, err
@@ -215,6 +259,7 @@ func discoverReleases(client *http.Client, graphURL *url.URL, startChannel strin
 		if err = processEdges(graph, minVersion, releasesByChannel[channel]); err != nil {
 			return nil, err
 		}
+		processConditionalEdges(graph.ConditionalEdges, allowedConditionalEdgeRisks, releasesByChannel[channel])
 	}
 	return releasesByChannel, nil
 }
@@ -229,8 +274,9 @@ func main() {
 		return
 	}
 
+	var allowedConditionalEdgeRisks []string
 	client := &http.Client{}
-	multiArchReleasesByChannel, err := discoverReleases(client, u, *startChannel, "multi")
+	multiArchReleasesByChannel, err := discoverReleases(client, u, *startChannel, "multi", allowedConditionalEdgeRisks)
 	if err != nil {
 		fmt.Printf("error discovering releases from %s: %v\n", *startChannel, err)
 		return

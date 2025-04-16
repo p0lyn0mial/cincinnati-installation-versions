@@ -49,7 +49,7 @@ func TestFetchGraph(t *testing.T) {
 			expectedError: "cincinnati graph URL is required",
 		},
 		{
-			name:        "Valid response for amd64",
+			name:        "valid response for amd64",
 			graphURL:    rawURLtoURLOrDie("https://api.openshift.com/api/upgrades_info/graph"),
 			inputFile:   "testdata/fetch-graph-valid-response.json",
 			channel:     "stable-4.16",
@@ -73,7 +73,7 @@ func TestFetchGraph(t *testing.T) {
 			expectedError: "",
 		},
 		{
-			name:          "Invalid JSON response",
+			name:          "invalid JSON response",
 			graphURL:      rawURLtoURLOrDie("https://api.openshift.com/api/upgrades_info/graph"),
 			inputFile:     "testdata/fetch-graph-invalid-response.json",
 			channel:       "stable-4.16",
@@ -84,7 +84,7 @@ func TestFetchGraph(t *testing.T) {
 			expectedError: "error parsing JSON",
 		},
 		{
-			name:          "Non-200 status code response",
+			name:          "non-200 status code response",
 			graphURL:      rawURLtoURLOrDie("https://api.openshift.com/api/upgrades_info/graph"),
 			inputFile:     "testdata/fetch-graph-valid-response.json",
 			channel:       "stable-4.16",
@@ -151,9 +151,10 @@ func TestDiscoverReleases(t *testing.T) {
 		startChannel string
 		arch         string
 		// responses maps URL -> fileResponse
-		responses     map[string]fileResponse
-		expected      ReleasesByChannel
-		expectedError string
+		responses                   map[string]fileResponse
+		allowedConditionalEdgeRisks []string
+		expected                    ReleasesByChannel
+		expectedError               string
 	}{
 		{
 			name:         "discovers only a single channel (even if multiple are available)",
@@ -231,17 +232,13 @@ func TestDiscoverReleases(t *testing.T) {
 				},
 			},
 		},
-
 		{
 			name:         "single channel with edges",
 			graphURL:     rawURLtoURLOrDie("https://api.openshift.com/api/upgrades_info/graph"),
 			startChannel: "stable-4.16",
 			arch:         "amd64",
 			responses: map[string]fileResponse{
-				"https://api.openshift.com/api/upgrades_info/graph?arch=amd64&channel=stable-4.16": {
-					filename:   "testdata/discover-releases-stable-4.16-edges.json",
-					statusCode: 200,
-				},
+				"https://api.openshift.com/api/upgrades_info/graph?arch=amd64&channel=stable-4.16": {filename: "testdata/discover-releases-stable-4.16-edges.json", statusCode: 200},
 			},
 			expected: ReleasesByChannel{
 				"stable-4.16": VersionReleases{
@@ -264,6 +261,85 @@ func TestDiscoverReleases(t *testing.T) {
 						Channel: "stable-4.16",
 						Arch:    "amd64",
 						Payload: "payload-4.16.5",
+					},
+				},
+			},
+		},
+		{
+			name:                        "conditional edges, all allowed",
+			graphURL:                    rawURLtoURLOrDie("https://api.openshift.com/api/upgrades_info/graph"),
+			startChannel:                "stable-4.16",
+			arch:                        "amd64",
+			allowedConditionalEdgeRisks: []string{"RiskA", "RiskB"},
+			responses: map[string]fileResponse{
+				"https://api.openshift.com/api/upgrades_info/graph?arch=amd64&channel=stable-4.16": {filename: "testdata/discover-releases-stable-4.16-conditional-edges.json", statusCode: 200},
+			},
+			expected: ReleasesByChannel{
+				"stable-4.16": VersionReleases{
+					"4.16.1": Release{
+						Version:           "4.16.1",
+						Channel:           "stable-4.16",
+						Arch:              "amd64",
+						Payload:           "payload-4.16.1",
+						AvailableUpgrades: []string{"4.16.3"},
+					},
+					"4.16.3": Release{
+						Version: "4.16.3",
+						Channel: "stable-4.16",
+						Arch:    "amd64",
+						Payload: "payload-4.16.3",
+					},
+				},
+			},
+		},
+		{
+			name:                        "conditional edges, partial allowed",
+			graphURL:                    rawURLtoURLOrDie("https://api.openshift.com/api/upgrades_info/graph"),
+			startChannel:                "stable-4.16",
+			arch:                        "amd64",
+			allowedConditionalEdgeRisks: []string{"RiskA"},
+			responses: map[string]fileResponse{
+				"https://api.openshift.com/api/upgrades_info/graph?arch=amd64&channel=stable-4.16": {filename: "testdata/discover-releases-stable-4.16-conditional-edges.json", statusCode: 200},
+			},
+			expected: ReleasesByChannel{
+				"stable-4.16": VersionReleases{
+					"4.16.1": Release{
+						Version: "4.16.1",
+						Channel: "stable-4.16",
+						Arch:    "amd64",
+						Payload: "payload-4.16.1",
+					},
+					"4.16.3": Release{
+						Version: "4.16.3",
+						Channel: "stable-4.16",
+						Arch:    "amd64",
+						Payload: "payload-4.16.3",
+					},
+				},
+			},
+		},
+		{
+			name:                        "conditional edges, none allowed",
+			graphURL:                    rawURLtoURLOrDie("https://api.openshift.com/api/upgrades_info/graph"),
+			startChannel:                "stable-4.16",
+			arch:                        "amd64",
+			allowedConditionalEdgeRisks: []string{},
+			responses: map[string]fileResponse{
+				"https://api.openshift.com/api/upgrades_info/graph?arch=amd64&channel=stable-4.16": {filename: "testdata/discover-releases-stable-4.16-conditional-edges.json", statusCode: 200},
+			},
+			expected: ReleasesByChannel{
+				"stable-4.16": VersionReleases{
+					"4.16.1": Release{
+						Version: "4.16.1",
+						Channel: "stable-4.16",
+						Arch:    "amd64",
+						Payload: "payload-4.16.1",
+					},
+					"4.16.3": Release{
+						Version: "4.16.3",
+						Channel: "stable-4.16",
+						Arch:    "amd64",
+						Payload: "payload-4.16.3",
 					},
 				},
 			},
@@ -292,7 +368,7 @@ func TestDiscoverReleases(t *testing.T) {
 				}),
 			}
 
-			releases, err := discoverReleases(client, tc.graphURL, tc.startChannel, tc.arch)
+			releases, err := discoverReleases(client, tc.graphURL, tc.startChannel, tc.arch, tc.allowedConditionalEdgeRisks)
 
 			if tc.expectedError != "" {
 				if err == nil {
@@ -347,7 +423,7 @@ func TestAggregateReleasesByChannelGroup(t *testing.T) {
 			},
 		},
 		{
-			name: "two channels with same prefix - merging AvailableUpgrades",
+			name: "two channels with same prefix, merging AvailableUpgrades",
 			input: ReleasesByChannel{
 				"stable-4.16": VersionReleases{
 					"4.16.1": Release{
