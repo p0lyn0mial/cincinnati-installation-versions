@@ -8,6 +8,7 @@ import (
 	"sort"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/p0lyn0mial/cincinnati-installation-versions/client"
 )
 
 func main() {
@@ -21,14 +22,16 @@ func main() {
 	}
 
 	var allowedConditionalEdgeRisks []string
-	client := &http.Client{}
-	multiArchReleasesByChannel, err := discoverReleases(client, u, *startChannel, "multi", allowedConditionalEdgeRisks)
+	hClient := &http.Client{}
+
+	cincinnatiClient := client.NewCincinnatiClient(hClient)
+	multiArchReleasesByChannel, err := cincinnatiClient.DiscoverReleases(u, *startChannel, "multi", allowedConditionalEdgeRisks)
 	if err != nil {
 		fmt.Printf("error discovering releases from %s: %v\n", *startChannel, err)
 		return
 	}
 
-	aggregatedMultiArchReleasesByChannelGroup := aggregateReleasesByChannelGroup(multiArchReleasesByChannel)
+	aggregatedMultiArchReleasesByChannelGroup := client.AggregateReleasesByChannelGroup(multiArchReleasesByChannel)
 	fmt.Println("\nAggregated releases by channel group (prefix) with unique versions:")
 	for group, versionsMap := range aggregatedMultiArchReleasesByChannelGroup {
 		fmt.Printf("Group: %s\n", group)
