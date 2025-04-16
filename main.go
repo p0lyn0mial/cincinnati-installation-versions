@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"strings"
 
@@ -15,6 +16,7 @@ import (
 
 type CincinnatiGraph struct {
 	Nodes []CincinnatiNode `json:"nodes"`
+	Edges [][]int          `json:"edges"`
 }
 
 type CincinnatiNode struct {
@@ -24,11 +26,12 @@ type CincinnatiNode struct {
 }
 
 type Release struct {
-	Version  *semver.Version
-	Channel  string
-	Arch     string
-	Payload  string
-	Metadata map[string]string
+	Version           *semver.Version
+	Channel           string
+	Arch              string
+	Payload           string
+	AvailableUpgrades []string
+	Metadata          map[string]string
 }
 
 type VersionReleases map[string]Release
@@ -92,6 +95,37 @@ func splitChannel(channel string) (string, string, error) {
 	return prefix, version, nil
 }
 
+// isValidVersion checks if the given version is not nil and >= minVersion
+func isValidVersion(v *semver.Version, minVersion *semver.Version) bool {
+	return v != nil && v.Compare(minVersion) >= 0
+}
+
+// processEdges process the cincinnati graph edges and updates AvailableUpgrades
+func processEdges(graph *CincinnatiGraph, minVersion *semver.Version, releases VersionReleases) error {
+	for idx, edge := range graph.Edges {
+		if len(edge) < 2 {
+			return fmt.Errorf("invalid edge format: expected 2 ints, got: %v", edge)
+		}
+		fromIdx, toIdx := edge[0], edge[1]
+		if fromIdx < 0 || fromIdx >= len(graph.Nodes) || toIdx < 0 || toIdx >= len(graph.Nodes) {
+			return fmt.Errorf("invalid edge indices: %v at index: %d", edge, idx)
+		}
+		fromNode := graph.Nodes[fromIdx]
+		toNode := graph.Nodes[toIdx]
+		if isValidVersion(fromNode.Version, minVersion) && isValidVersion(toNode.Version, minVersion) {
+			fromVerStr := fromNode.Version.String()
+			toVerStr := toNode.Version.String()
+			if r, ok := releases[fromVerStr]; ok {
+				if !slices.Contains(r.AvailableUpgrades, toVerStr) {
+					r.AvailableUpgrades = append(r.AvailableUpgrades, toVerStr)
+					releases[fromVerStr] = r
+				}
+			}
+		}
+	}
+	return nil
+}
+
 // discoverReleases discovers new releases from the startChannels for the given arch.
 // It returns a ReleasesByChannel, with keys as full channel names.
 func discoverReleases(client *http.Client, graphURL *url.URL, startChannel string, arch string) (ReleasesByChannel, error) {
@@ -132,7 +166,7 @@ func discoverReleases(client *http.Client, graphURL *url.URL, startChannel strin
 		}
 
 		for _, node := range graph.Nodes {
-			if node.Version != nil && node.Version.Compare(minVersion) >= 0 {
+			if isValidVersion(node.Version, minVersion) {
 				verStr := node.Version.String()
 				r := Release{
 					Version:  node.Version,
@@ -161,6 +195,10 @@ func discoverReleases(client *http.Client, graphURL *url.URL, startChannel strin
 					}
 				}
 			}
+		}
+
+		if err = processEdges(graph, minVersion, releasesByChannel[channel]); err != nil {
+			return nil, err
 		}
 	}
 
@@ -199,7 +237,12 @@ func main() {
 		})
 		for _, ver := range versions {
 			release := versionsMap[ver]
-			fmt.Printf("  Version: %s, Channel: %s, Payload: %s, Arch: %s\n", ver, release.Channel, release.Payload, release.Arch)
+			sort.Slice(release.AvailableUpgrades, func(i, j int) bool {
+				v1, _ := semver.NewVersion(release.AvailableUpgrades[i])
+				v2, _ := semver.NewVersion(release.AvailableUpgrades[j])
+				return v1.Compare(v2) < 0
+			})
+			fmt.Printf("  Version: %s, Channel: %s, Payload: %s, Arch: %s, AvailableUpgrades: %s\n", ver, release.Channel, release.Payload, release.Arch, release.AvailableUpgrades)
 		}
 	}
 }
@@ -215,7 +258,14 @@ func aggregateReleasesByChannelGroup(releasesByChannel ReleasesByChannel) Releas
 			aggregated[group] = make(VersionReleases)
 		}
 		for version, release := range versionMap {
-			if _, exists := aggregated[group][version]; !exists {
+			if existing, exists := aggregated[group][version]; exists {
+				for _, up := range release.AvailableUpgrades {
+					if !slices.Contains(existing.AvailableUpgrades, up) {
+						existing.AvailableUpgrades = append(existing.AvailableUpgrades, up)
+					}
+				}
+				aggregated[group][version] = existing
+			} else {
 				aggregated[group][version] = release
 			}
 		}
