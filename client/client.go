@@ -50,6 +50,23 @@ type VersionReleases map[string]Release
 
 type ReleasesByChannel map[string]VersionReleases
 
+type CincinnatiClient struct {
+	httpClient *http.Client
+}
+
+func NewCincinnatiClient(httpClient *http.Client) *CincinnatiClient {
+	if httpClient == nil {
+		httpClient = http.DefaultClient
+	}
+	return &CincinnatiClient{
+		httpClient: httpClient,
+	}
+}
+
+func (c *CincinnatiClient) DiscoverReleases(graphURL *url.URL, startChannel string, arch string, allowedConditionalEdgeRisks []string) (ReleasesByChannel, error) {
+	return discoverReleases(c.httpClient, graphURL, startChannel, arch, allowedConditionalEdgeRisks)
+}
+
 // fetchGraph fetches the upgrade graph for a given channel and architecture.
 func fetchGraph(client *http.Client, u *url.URL, channel, arch string) (*CincinnatiGraph, error) {
 	if u == nil {
