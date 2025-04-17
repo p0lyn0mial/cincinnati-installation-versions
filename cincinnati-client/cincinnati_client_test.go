@@ -1,4 +1,4 @@
-package client
+package cincinnaticlient
 
 import (
 	"bytes"
@@ -38,7 +38,7 @@ func TestFetchGraph(t *testing.T) {
 		arch          string
 		statusCode    int
 		expectedURL   string
-		expectedGraph *CincinnatiGraph
+		expectedGraph *Graph
 		expectedError string
 	}{
 		{
@@ -56,8 +56,8 @@ func TestFetchGraph(t *testing.T) {
 			arch:        "amd64",
 			statusCode:  200,
 			expectedURL: "https://api.openshift.com/api/upgrades_info/graph?arch=amd64&channel=stable-4.16",
-			expectedGraph: &CincinnatiGraph{
-				Nodes: []CincinnatiNode{
+			expectedGraph: &Graph{
+				Nodes: []Node{
 					{
 						Version:  versionOrDie("4.16.1"),
 						Payload:  "example-payload",
