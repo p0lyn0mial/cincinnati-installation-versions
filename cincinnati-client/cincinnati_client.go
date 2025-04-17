@@ -1,4 +1,4 @@
-package client
+package cincinnaticlient
 
 import (
 	"encoding/json"
@@ -12,13 +12,13 @@ import (
 	"github.com/Masterminds/semver/v3"
 )
 
-type CincinnatiGraph struct {
-	Nodes            []CincinnatiNode   `json:"nodes"`
+type Graph struct {
+	Nodes            []Node             `json:"nodes"`
 	Edges            [][]int            `json:"edges"`
 	ConditionalEdges []ConditionalEdges `json:"conditionalEdges"`
 }
 
-type CincinnatiNode struct {
+type Node struct {
 	Version  *semver.Version   `json:"version"`
 	Payload  string            `json:"payload"`
 	Metadata map[string]string `json:"metadata"`
@@ -50,25 +50,25 @@ type VersionReleases map[string]Release
 
 type ReleasesByChannel map[string]VersionReleases
 
-type CincinnatiClient struct {
+type Client struct {
 	httpClient *http.Client
 }
 
-func NewCincinnatiClient(httpClient *http.Client) *CincinnatiClient {
+func New(httpClient *http.Client) *Client {
 	if httpClient == nil {
 		httpClient = http.DefaultClient
 	}
-	return &CincinnatiClient{
+	return &Client{
 		httpClient: httpClient,
 	}
 }
 
-func (c *CincinnatiClient) DiscoverReleases(graphURL *url.URL, startChannel string, arch string, allowedConditionalEdgeRisks []string) (ReleasesByChannel, error) {
+func (c *Client) DiscoverReleases(graphURL *url.URL, startChannel string, arch string, allowedConditionalEdgeRisks []string) (ReleasesByChannel, error) {
 	return discoverReleases(c.httpClient, graphURL, startChannel, arch, allowedConditionalEdgeRisks)
 }
 
 // fetchGraph fetches the upgrade graph for a given channel and architecture.
-func fetchGraph(client *http.Client, u *url.URL, channel, arch string) (*CincinnatiGraph, error) {
+func fetchGraph(client *http.Client, u *url.URL, channel, arch string) (*Graph, error) {
 	if u == nil {
 		return nil, fmt.Errorf("cincinnati graph URL is required")
 	}
@@ -96,7 +96,7 @@ func fetchGraph(client *http.Client, u *url.URL, channel, arch string) (*Cincinn
 	if err != nil {
 		return nil, fmt.Errorf("error reading response from %s: %w", modURL.String(), err)
 	}
-	var graph CincinnatiGraph
+	var graph Graph
 	if err = json.Unmarshal(body, &graph); err != nil {
 		return nil, fmt.Errorf("error parsing JSON from %s: %w", modURL.String(), err)
 	}
@@ -130,7 +130,7 @@ func isValidVersion(v *semver.Version, minVersion *semver.Version) bool {
 }
 
 // processEdges process the cincinnati graph edges and updates AvailableUpgrades
-func processEdges(graph *CincinnatiGraph, minVersion *semver.Version, releases VersionReleases) error {
+func processEdges(graph *Graph, minVersion *semver.Version, releases VersionReleases) error {
 	for idx, edge := range graph.Edges {
 		if len(edge) < 2 {
 			return fmt.Errorf("invalid edge format: expected 2 ints, got: %v", edge)
@@ -185,7 +185,7 @@ func processConditionalEdges(conditionalEdges []ConditionalEdges, allowedConditi
 }
 
 // createRelease simply creates a release from the given node.
-func createRelease(node CincinnatiNode, channel, arch string, minVersion *semver.Version) (Release, bool) {
+func createRelease(node Node, channel, arch string, minVersion *semver.Version) (Release, bool) {
 	if !isValidVersion(node.Version, minVersion) {
 		return Release{}, false
 	}
@@ -199,7 +199,7 @@ func createRelease(node CincinnatiNode, channel, arch string, minVersion *semver
 }
 
 // discoverNewChannels checks node's metadata and returns new channels that match the condition.
-func discoverNewChannels(node CincinnatiNode, startChannelPrefix string, minVersion *semver.Version) []string {
+func discoverNewChannels(node Node, startChannelPrefix string, minVersion *semver.Version) []string {
 	var newCh []string
 	meta, ok := node.Metadata["io.openshift.upgrades.graph.release.channels"]
 	if !ok {
