@@ -1,4 +1,4 @@
-package main
+package client
 
 import (
 	"bytes"
@@ -522,7 +522,7 @@ func TestAggregateReleasesByChannelGroup(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := aggregateReleasesByChannelGroup(tc.input)
+			result := AggregateReleasesByChannelGroup(tc.input)
 
 			if diff := cmp.Diff(result, tc.expected, cmpopts.IgnoreFields(Release{}, "Channel")); diff != "" {
 				t.Errorf("Unexpected output (-expected +got):\n%s", diff)
