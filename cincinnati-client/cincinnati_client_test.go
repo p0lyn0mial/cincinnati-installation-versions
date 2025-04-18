@@ -495,7 +495,10 @@ func TestAggregateReleasesByChannelGroup(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := AggregateReleasesByChannelGroup(tc.input)
+			result, err := AggregateReleasesByChannelGroupAndSortAvailableUpgrades(tc.input)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 
 			if diff := cmp.Diff(result, tc.expected); diff != "" {
 				t.Errorf("Unexpected output (-expected +got):\n%s", diff)

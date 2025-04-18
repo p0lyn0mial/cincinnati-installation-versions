@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"sort"
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
@@ -43,6 +44,28 @@ type Release struct {
 	Arch              string
 	Payload           string
 	AvailableUpgrades []string
+}
+
+// SortAvailableUpgrades orders AvailableUpgrades in ascending semantic-version order.
+// It returns an error if any entry is not a valid semantic version.
+//
+// NOTE: Every version string must already be a valid semver, since they
+//
+//	are converted to semver objects when reading the cincinnati graph.
+func (r Release) SortAvailableUpgrades() error {
+	for i, upgrade := range r.AvailableUpgrades {
+		_, err := semver.NewVersion(upgrade)
+		if err != nil {
+			return fmt.Errorf("%s: invalid semantic version in AvailableUpgrades[%d]=%q: %w", r.Version, i, upgrade, err)
+		}
+	}
+
+	sort.Slice(r.AvailableUpgrades, func(i, j int) bool {
+		v1, _ := semver.NewVersion(r.AvailableUpgrades[i])
+		v2, _ := semver.NewVersion(r.AvailableUpgrades[j])
+		return v1.Compare(v2) < 0
+	})
+	return nil
 }
 
 type VersionReleases map[string]Release

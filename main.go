@@ -31,7 +31,12 @@ func main() {
 		return
 	}
 
-	aggregatedMultiArchReleasesByChannelGroup := cincinnaticlient.AggregateReleasesByChannelGroup(multiArchReleasesByChannel)
+	aggregatedMultiArchReleasesByChannelGroup, err := cincinnaticlient.AggregateReleasesByChannelGroupAndSortAvailableUpgrades(multiArchReleasesByChannel)
+	if err != nil {
+		fmt.Printf("error aggregating releases from %s: %v\n", *startChannel, err)
+		return
+	}
+
 	fmt.Println("\nAggregated releases by channel group (prefix) with unique versions:")
 	for group, versionsMap := range aggregatedMultiArchReleasesByChannelGroup {
 		fmt.Printf("Group: %s\n", group)
@@ -46,11 +51,6 @@ func main() {
 		})
 		for _, ver := range versions {
 			release := versionsMap[ver]
-			sort.Slice(release.AvailableUpgrades, func(i, j int) bool {
-				v1, _ := semver.NewVersion(release.AvailableUpgrades[i])
-				v2, _ := semver.NewVersion(release.AvailableUpgrades[j])
-				return v1.Compare(v2) < 0
-			})
 			fmt.Printf("  Version: %s, Payload: %s, Arch: %s, AvailableUpgrades: %s\n", ver, release.Payload, release.Arch, release.AvailableUpgrades)
 		}
 	}
