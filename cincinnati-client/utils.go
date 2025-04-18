@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-func AggregateReleasesByChannelGroup(releasesByChannel ReleasesByChannel) ReleasesByChannel {
+func AggregateReleasesByChannelGroupAndSortAvailableUpgrades(releasesByChannel ReleasesByChannel) (ReleasesByChannel, error) {
 	aggregated := make(ReleasesByChannel)
 	for channel, versionMap := range releasesByChannel {
 		group := channel
@@ -16,17 +16,20 @@ func AggregateReleasesByChannelGroup(releasesByChannel ReleasesByChannel) Releas
 			aggregated[group] = make(VersionReleases)
 		}
 		for version, release := range versionMap {
+			releaseToAdd := release
 			if existing, exists := aggregated[group][version]; exists {
 				for _, up := range release.AvailableUpgrades {
 					if !slices.Contains(existing.AvailableUpgrades, up) {
 						existing.AvailableUpgrades = append(existing.AvailableUpgrades, up)
 					}
 				}
-				aggregated[group][version] = existing
-			} else {
-				aggregated[group][version] = release
+				releaseToAdd = existing
 			}
+			if err := releaseToAdd.SortAvailableUpgrades(); err != nil {
+				return nil, err
+			}
+			aggregated[group][version] = releaseToAdd
 		}
 	}
-	return aggregated
+	return aggregated, nil
 }
