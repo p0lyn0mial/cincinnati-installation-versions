@@ -40,7 +40,6 @@ type ConditionalEdges struct {
 
 type Release struct {
 	Version           string
-	Channel           string
 	Arch              string
 	Payload           string
 	AvailableUpgrades []string
@@ -185,13 +184,12 @@ func processConditionalEdges(conditionalEdges []ConditionalEdges, allowedConditi
 }
 
 // createRelease simply creates a release from the given node.
-func createRelease(node Node, channel, arch string, minVersion *semver.Version) (Release, bool) {
+func createRelease(node Node, arch string, minVersion *semver.Version) (Release, bool) {
 	if !isValidVersion(node.Version, minVersion) {
 		return Release{}, false
 	}
 	r := Release{
 		Version: node.Version.String(),
-		Channel: channel,
 		Arch:    arch,
 		Payload: node.Payload,
 	}
@@ -260,7 +258,7 @@ func discoverReleases(client *http.Client, graphURL *url.URL, startChannel strin
 		}
 
 		for _, node := range graph.Nodes {
-			if r, found := createRelease(node, channel, arch, minVersion); found {
+			if r, found := createRelease(node, arch, minVersion); found {
 				releasesByChannel[channel][r.Version] = r
 			}
 			newChannels := discoverNewChannels(node, startChannelPrefix, minVersion)

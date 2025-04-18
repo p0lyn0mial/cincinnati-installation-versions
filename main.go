@@ -51,7 +51,7 @@ func main() {
 				v2, _ := semver.NewVersion(release.AvailableUpgrades[j])
 				return v1.Compare(v2) < 0
 			})
-			fmt.Printf("  Version: %s, Channel: %s, Payload: %s, Arch: %s, AvailableUpgrades: %s\n", ver, release.Channel, release.Payload, release.Arch, release.AvailableUpgrades)
+			fmt.Printf("  Version: %s, Payload: %s, Arch: %s, AvailableUpgrades: %s\n", ver, release.Payload, release.Arch, release.AvailableUpgrades)
 		}
 	}
 }
