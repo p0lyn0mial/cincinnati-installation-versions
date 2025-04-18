@@ -40,7 +40,6 @@ type ConditionalEdges struct {
 
 type Release struct {
 	Version           string
-	Channel           string
 	Arch              string
 	Payload           string
 	AvailableUpgrades []string
@@ -130,7 +129,7 @@ func isValidVersion(v *semver.Version, minVersion *semver.Version) bool {
 }
 
 // processEdges process the cincinnati graph edges and updates AvailableUpgrades
-func processEdges(graph *Graph, minVersion *semver.Version, releases VersionReleases) error {
+func processEdges(graph *Graph, releases VersionReleases) error {
 	for idx, edge := range graph.Edges {
 		if len(edge) < 2 {
 			return fmt.Errorf("invalid edge format: expected 2 ints, got: %v", edge)
@@ -139,16 +138,12 @@ func processEdges(graph *Graph, minVersion *semver.Version, releases VersionRele
 		if fromIdx < 0 || fromIdx >= len(graph.Nodes) || toIdx < 0 || toIdx >= len(graph.Nodes) {
 			return fmt.Errorf("invalid edge indices: %v at index: %d", edge, idx)
 		}
-		fromNode := graph.Nodes[fromIdx]
-		toNode := graph.Nodes[toIdx]
-		if isValidVersion(fromNode.Version, minVersion) && isValidVersion(toNode.Version, minVersion) {
-			fromVerStr := fromNode.Version.String()
-			toVerStr := toNode.Version.String()
-			if r, ok := releases[fromVerStr]; ok {
-				if !slices.Contains(r.AvailableUpgrades, toVerStr) {
-					r.AvailableUpgrades = append(r.AvailableUpgrades, toVerStr)
-					releases[fromVerStr] = r
-				}
+		fromVerStr := graph.Nodes[fromIdx].Version.String()
+		if r, ok := releases[fromVerStr]; ok {
+			toVerStr := graph.Nodes[toIdx].Version.String()
+			if !slices.Contains(r.AvailableUpgrades, toVerStr) {
+				r.AvailableUpgrades = append(r.AvailableUpgrades, toVerStr)
+				releases[fromVerStr] = r
 			}
 		}
 	}
@@ -185,13 +180,12 @@ func processConditionalEdges(conditionalEdges []ConditionalEdges, allowedConditi
 }
 
 // createRelease simply creates a release from the given node.
-func createRelease(node Node, channel, arch string, minVersion *semver.Version) (Release, bool) {
+func createRelease(node Node, arch string, minVersion *semver.Version) (Release, bool) {
 	if !isValidVersion(node.Version, minVersion) {
 		return Release{}, false
 	}
 	r := Release{
 		Version: node.Version.String(),
-		Channel: channel,
 		Arch:    arch,
 		Payload: node.Payload,
 	}
@@ -260,7 +254,7 @@ func discoverReleases(client *http.Client, graphURL *url.URL, startChannel strin
 		}
 
 		for _, node := range graph.Nodes {
-			if r, found := createRelease(node, channel, arch, minVersion); found {
+			if r, found := createRelease(node, arch, minVersion); found {
 				releasesByChannel[channel][r.Version] = r
 			}
 			newChannels := discoverNewChannels(node, startChannelPrefix, minVersion)
@@ -271,7 +265,7 @@ func discoverReleases(client *http.Client, graphURL *url.URL, startChannel strin
 				}
 			}
 		}
-		if err = processEdges(graph, minVersion, releasesByChannel[channel]); err != nil {
+		if err = processEdges(graph, releasesByChannel[channel]); err != nil {
 			return nil, err
 		}
 		processConditionalEdges(graph.ConditionalEdges, allowedConditionalEdgeRisks, releasesByChannel[channel])
