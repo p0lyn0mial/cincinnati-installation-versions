@@ -12,7 +12,6 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
 func versionOrDie(v string) *semver.Version {
@@ -168,7 +167,6 @@ func TestDiscoverReleases(t *testing.T) {
 				"stable-4.16": {
 					"4.16.2": Release{
 						Version: "4.16.2",
-						Channel: "stable-4.16",
 						Arch:    "amd64",
 						Payload: "payload-stable",
 					},
@@ -187,7 +185,6 @@ func TestDiscoverReleases(t *testing.T) {
 				"stable-4.16": {
 					"4.16.2": Release{
 						Version: "4.16.2",
-						Channel: "stable-4.16",
 						Arch:    "amd64",
 						Payload: "payload-stable",
 					},
@@ -209,7 +206,6 @@ func TestDiscoverReleases(t *testing.T) {
 				"stable-4.16": {
 					"4.16.2": Release{
 						Version: "4.16.2",
-						Channel: "stable-4.16",
 						Arch:    "amd64",
 						Payload: "payload-stable",
 					},
@@ -217,7 +213,6 @@ func TestDiscoverReleases(t *testing.T) {
 				"stable-4.17": {
 					"4.17.5": Release{
 						Version: "4.17.5",
-						Channel: "stable-4.17",
 						Arch:    "amd64",
 						Payload: "payload-4.17",
 					},
@@ -225,7 +220,6 @@ func TestDiscoverReleases(t *testing.T) {
 				"stable-4.18": {
 					"4.18.1": Release{
 						Version: "4.18.1",
-						Channel: "stable-4.18",
 						Arch:    "amd64",
 						Payload: "payload-4.18",
 					},
@@ -244,21 +238,18 @@ func TestDiscoverReleases(t *testing.T) {
 				"stable-4.16": VersionReleases{
 					"4.16.1": Release{
 						Version:           "4.16.1",
-						Channel:           "stable-4.16",
 						Arch:              "amd64",
 						Payload:           "payload-4.16.1",
 						AvailableUpgrades: []string{"4.16.2", "4.16.5"},
 					},
 					"4.16.2": Release{
 						Version:           "4.16.2",
-						Channel:           "stable-4.16",
 						Arch:              "amd64",
 						Payload:           "payload-4.16.2",
 						AvailableUpgrades: []string{"4.16.5"},
 					},
 					"4.16.5": Release{
 						Version: "4.16.5",
-						Channel: "stable-4.16",
 						Arch:    "amd64",
 						Payload: "payload-4.16.5",
 					},
@@ -278,14 +269,12 @@ func TestDiscoverReleases(t *testing.T) {
 				"stable-4.16": VersionReleases{
 					"4.16.1": Release{
 						Version:           "4.16.1",
-						Channel:           "stable-4.16",
 						Arch:              "amd64",
 						Payload:           "payload-4.16.1",
 						AvailableUpgrades: []string{"4.16.3"},
 					},
 					"4.16.3": Release{
 						Version: "4.16.3",
-						Channel: "stable-4.16",
 						Arch:    "amd64",
 						Payload: "payload-4.16.3",
 					},
@@ -305,13 +294,11 @@ func TestDiscoverReleases(t *testing.T) {
 				"stable-4.16": VersionReleases{
 					"4.16.1": Release{
 						Version: "4.16.1",
-						Channel: "stable-4.16",
 						Arch:    "amd64",
 						Payload: "payload-4.16.1",
 					},
 					"4.16.3": Release{
 						Version: "4.16.3",
-						Channel: "stable-4.16",
 						Arch:    "amd64",
 						Payload: "payload-4.16.3",
 					},
@@ -331,13 +318,11 @@ func TestDiscoverReleases(t *testing.T) {
 				"stable-4.16": VersionReleases{
 					"4.16.1": Release{
 						Version: "4.16.1",
-						Channel: "stable-4.16",
 						Arch:    "amd64",
 						Payload: "payload-4.16.1",
 					},
 					"4.16.3": Release{
 						Version: "4.16.3",
-						Channel: "stable-4.16",
 						Arch:    "amd64",
 						Payload: "payload-4.16.3",
 					},
@@ -403,7 +388,6 @@ func TestAggregateReleasesByChannelGroup(t *testing.T) {
 				"stable-4.16": VersionReleases{
 					"4.16.1": Release{
 						Version:           "4.16.1",
-						Channel:           "stable-4.16",
 						Arch:              "amd64",
 						Payload:           "p1",
 						AvailableUpgrades: []string{"4.16.2"},
@@ -414,7 +398,6 @@ func TestAggregateReleasesByChannelGroup(t *testing.T) {
 				"stable": VersionReleases{
 					"4.16.1": Release{
 						Version:           "4.16.1",
-						Channel:           "stable-4.16",
 						Arch:              "amd64",
 						Payload:           "p1",
 						AvailableUpgrades: []string{"4.16.2"},
@@ -428,14 +411,12 @@ func TestAggregateReleasesByChannelGroup(t *testing.T) {
 				"stable-4.16": VersionReleases{
 					"4.16.1": Release{
 						Version:           "4.16.1",
-						Channel:           "stable-4.16",
 						Arch:              "amd64",
 						Payload:           "p1",
 						AvailableUpgrades: []string{"4.16.2"},
 					},
 					"4.16.2": Release{
 						Version:           "4.16.2",
-						Channel:           "stable-4.16",
 						Arch:              "amd64",
 						Payload:           "p2",
 						AvailableUpgrades: []string{},
@@ -444,14 +425,12 @@ func TestAggregateReleasesByChannelGroup(t *testing.T) {
 				"stable-4.17": VersionReleases{
 					"4.16.1": Release{
 						Version:           "4.16.1",
-						Channel:           "stable-4.17",
 						Arch:              "amd64",
 						Payload:           "p1",
 						AvailableUpgrades: []string{"4.16.5"},
 					},
 					"4.16.3": Release{
 						Version:           "4.16.3",
-						Channel:           "stable-4.17",
 						Arch:              "amd64",
 						Payload:           "p3",
 						AvailableUpgrades: []string{"4.16.7"},
@@ -462,21 +441,18 @@ func TestAggregateReleasesByChannelGroup(t *testing.T) {
 				"stable": VersionReleases{
 					"4.16.1": Release{
 						Version:           "4.16.1",
-						Channel:           "stable-4.16",
 						Arch:              "amd64",
 						Payload:           "p1",
 						AvailableUpgrades: []string{"4.16.2", "4.16.5"},
 					},
 					"4.16.2": Release{
 						Version:           "4.16.2",
-						Channel:           "stable-4.16",
 						Arch:              "amd64",
 						Payload:           "p2",
 						AvailableUpgrades: []string{},
 					},
 					"4.16.3": Release{
 						Version:           "4.16.3",
-						Channel:           "stable-4.17",
 						Arch:              "amd64",
 						Payload:           "p3",
 						AvailableUpgrades: []string{"4.16.7"},
@@ -490,7 +466,6 @@ func TestAggregateReleasesByChannelGroup(t *testing.T) {
 				"stable-4.16": VersionReleases{
 					"4.16.1": Release{
 						Version:           "4.16.1",
-						Channel:           "stable-4.16",
 						Arch:              "amd64",
 						Payload:           "p1",
 						AvailableUpgrades: []string{"4.16.2"},
@@ -499,7 +474,6 @@ func TestAggregateReleasesByChannelGroup(t *testing.T) {
 				"stable-4.17": VersionReleases{
 					"4.16.1": Release{
 						Version:           "4.16.1",
-						Channel:           "stable-4.17",
 						Arch:              "amd64",
 						Payload:           "p1",
 						AvailableUpgrades: []string{"4.16.2", "4.16.5"},
@@ -510,7 +484,6 @@ func TestAggregateReleasesByChannelGroup(t *testing.T) {
 				"stable": VersionReleases{
 					"4.16.1": Release{
 						Version:           "4.16.1",
-						Channel:           "stable-4.16",
 						Arch:              "amd64",
 						Payload:           "p1",
 						AvailableUpgrades: []string{"4.16.2", "4.16.5"},
@@ -524,7 +497,7 @@ func TestAggregateReleasesByChannelGroup(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result := AggregateReleasesByChannelGroup(tc.input)
 
-			if diff := cmp.Diff(result, tc.expected, cmpopts.IgnoreFields(Release{}, "Channel")); diff != "" {
+			if diff := cmp.Diff(result, tc.expected); diff != "" {
 				t.Errorf("Unexpected output (-expected +got):\n%s", diff)
 			}
 		})
