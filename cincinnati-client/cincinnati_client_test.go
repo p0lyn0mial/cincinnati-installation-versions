@@ -10,12 +10,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Masterminds/semver/v3"
 	"github.com/google/go-cmp/cmp"
+	"github.com/hashicorp/go-version"
 )
 
-func versionOrDie(v string) *semver.Version {
-	ver, err := semver.NewVersion(v)
+func versionOrDie(v string) *version.Version {
+	ver, err := version.NewVersion(v)
 	if err != nil {
 		panic(err)
 	}
@@ -102,7 +102,7 @@ func TestFetchGraph(t *testing.T) {
 				t.Fatalf("Failed to read test data file: %v", err)
 			}
 
-			client := &http.Client{
+			hClient := &http.Client{
 				Transport: RoundTripFunc(func(req *http.Request) *http.Response {
 					if req.URL.String() != tc.expectedURL {
 						t.Errorf("Unexpected URL: got %s, expected %s", req.URL.String(), tc.expectedURL)
@@ -115,7 +115,9 @@ func TestFetchGraph(t *testing.T) {
 				}),
 			}
 
-			graph, err := fetchGraph(client, tc.graphURL, tc.channel, tc.arch)
+			target := New(hClient)
+
+			graph, err := target.fetchGraph(tc.graphURL, tc.channel, tc.arch)
 			if tc.expectedError != "" {
 				if err == nil {
 					t.Fatalf("Expected error containing %q, but got none", tc.expectedError)
@@ -333,7 +335,7 @@ func TestDiscoverReleases(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			client := &http.Client{
+			hClient := &http.Client{
 				Transport: RoundTripFunc(func(req *http.Request) *http.Response {
 					url := req.URL.String()
 					respMapping, ok := tc.responses[url]
@@ -353,7 +355,9 @@ func TestDiscoverReleases(t *testing.T) {
 				}),
 			}
 
-			releases, err := discoverReleases(client, tc.graphURL, tc.startChannel, tc.arch, tc.allowedConditionalEdgeRisks)
+			target := New(hClient)
+
+			releases, err := target.DiscoverReleases(tc.graphURL, tc.startChannel, tc.arch, tc.allowedConditionalEdgeRisks)
 
 			if tc.expectedError != "" {
 				if err == nil {
